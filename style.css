@@ -134,3 +134,70 @@ footer {
     padding: 20px 0;
     font-size: 0.9em;
 }
+
+/* Responsive styles */
+@media screen and (max-width: 768px) {
+    .header-content {
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      align-items: center;
+    }
+  
+    .logo img {
+      height: 40px; /* Slightly reduce logo size on mobile */
+    }
+  
+    nav {
+      display: flex;
+      align-items: center;
+    }
+  
+    .menu-toggle {
+      display: block;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 10px;
+      margin-left: auto; /* Push the toggle to the right */
+    }
+  
+    .menu-toggle span {
+      display: block;
+      width: 25px;
+      height: 3px;
+      background-color: black;
+      margin: 5px 0;
+      transition: 0.4s;
+    }
+  
+    .nav-links {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      background-color: white;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+  
+    .nav-links.show {
+      display: flex;
+    }
+  
+    nav ul li {
+      margin: 10px 0;
+    }
+  }
+  
+  @media screen and (min-width: 769px) {
+    .menu-toggle {
+      display: none;
+    }
+  
+    .nav-links {
+      display: flex !important;
+    }
+  }
+  

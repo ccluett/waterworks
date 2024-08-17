@@ -16,34 +16,41 @@
                 </a>
             </div>
             <nav>
-                <ul>
-                    <li><a href="#home">Home</a></li>
-                    <li><a href="#about">About</a></li>
-                    <li><a href="#services">Services</a></li>
-                    <li><a href="#contact">Contact</a></li>
+                <button class="menu-toggle" aria-label="Toggle menu">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </button>
+                <ul class="nav-links">
+                  <li><a href="#home">Home</a></li>
+                  <li><a href="#about">About</a></li>
+                  <li><a href="#services">Services</a></li>
+                  <li><a href="#contact">Contact</a></li>
                 </ul>
-            </nav>
+              </nav>
         </div>
     </header>
     <main>
         <section id="home">
             <div class="home-content">
                 <div class="home-text">
-                    <h1>Independent design, research, and development consultancy developing innovative solutions through creativity and engineering</h1>
+                    <h1>Independent design, research and development consultancy developing innovative solutions through creativity and engineering</h1>
                 </div>
                 <div class="home-image"></div>
             </div>
         </section>
         <section id="about">
             <h2>About Us</h2>
-            <p>Waterworks Labs LLC was founded by Chris Cluett to design and create solutions to unique problems and develop breakthrough technologies. Waterworks Labs conducts contract work and provides design, engineering and consulting services. Profits are reinvested in completely independent internal research and development ideas to grow new technologies and products. </p>
+            <p>Waterworks Labs LLC was founded by Chris Cluett to design and create solutions to unique problems and develop breakthrough technologies. Waterworks Labs conducts contract work and provides design, engineering and consulting services. Profits are reinvested in independent internal research and development projects to grow new ideas, technologies and products. </p>
         </section>
         <section id="services">
             <h2>Our Services</h2>
             <ul>
+                <li>Industrial Design</li>
                 <li>Experimental Prototyping</li>
-                <li>Ocean Technology</li>
-                <li>Subsea Film Production Engineering Support</li>
+                <li>Marine Robotics & Ocean Engineering</li>
+                <li>Fluid Flow and Structural Simulation & Analysis</li>
+                <li>Subsea Pressure Vessel Design, Fabrication and Outfit</li>
             </ul>
         </section>
         <section id="contact">
@@ -62,6 +69,11 @@
                     behavior: 'smooth'
                 });
             });
+        });
+    </script>
+    <script>
+        document.querySelector('.menu-toggle').addEventListener('click', function() {
+            document.querySelector('.nav-links').classList.toggle('show');
         });
     </script>
 </body>
