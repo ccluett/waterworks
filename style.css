@@ -189,6 +189,18 @@ footer {
     nav ul li {
       margin: 10px 0;
     }
+    
+    .home-content {
+        flex-direction: column;
+    }
+
+    .home-text {
+        padding: 20px;
+    }
+
+    .home-image {
+        height: 50vh; /* Adjust height on mobile */
+    }
   }
   
   @media screen and (min-width: 769px) {
@@ -198,6 +210,10 @@ footer {
   
     .nav-links {
       display: flex !important;
+    }
+
+    .home-content {
+        flex-direction: row;
     }
   }
   
