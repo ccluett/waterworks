@@ -108,7 +108,7 @@ section p {
 
 .home-image {
     flex: 1;
-    background-image: url('pictures/enter.webp');
+    background-image: url('pictures/headquarters-1.jpeg');
     background-size: cover;
     background-position: center;
 }
