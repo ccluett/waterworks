@@ -186,7 +186,7 @@ footer {
     }
   
     .project-logo {
-        width: 25vw; /* Slightly larger on smaller screens */
+        width: 50vw; /* Slightly larger on smaller screens */
         max-width: 100px;
     }
 
