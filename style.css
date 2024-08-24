@@ -123,6 +123,16 @@ section p {
     margin-bottom: 10px;
 }
 
+#projects ul {
+    list-style-type: disc;
+    padding-left: 20px;
+    text-align: left;
+}
+
+#projects li {
+    margin-bottom: 10px;
+}
+
 #about { 
     background-color: black; 
     color: white;
@@ -131,6 +141,29 @@ section p {
     background-color: black; 
     color: white;
 }
+
+#projects { 
+    background-color: black; 
+    color: white;
+}
+
+.project-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    color: white;
+    margin-top: 20px;
+}
+
+.project-logo {
+    width: 30vw; /* 15% of the viewport width */
+    max-width: 1200px; /* Maximum size */
+    min-width: 50px; /* Minimum size */
+    height: auto;
+    margin-bottom: 10px;
+}
+
 #contact { 
     background-color: black; 
     color: white;
@@ -152,6 +185,11 @@ footer {
       align-items: center;
     }
   
+    .project-logo {
+        width: 25vw; /* Slightly larger on smaller screens */
+        max-width: 100px;
+    }
+
     .logo img {
       height: 50px; /* Slightly reduce logo size on mobile */
     }
