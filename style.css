@@ -219,7 +219,7 @@ footer {
     
       #projects .project-logo {
         width: 60%;
-        max-width: none;
+        max-width: 1200px;
       }
     
       #projects .project-description {
