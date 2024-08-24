@@ -164,6 +164,29 @@ section p {
     margin-bottom: 10px;
 }
 
+#projects .project-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  
+  #projects .project-logo {
+    width: 25vw; /* 40% of the viewport width */
+    max-width: 600px; /* Maximum size */
+    min-width: 200px; /* Minimum size */
+    height: auto;
+  }
+  
+  #projects .project-description {
+    flex: 1;
+    text-align: left;
+    line-height: 1.6;
+  }
+
 #contact { 
     background-color: black; 
     color: white;
@@ -189,6 +212,20 @@ footer {
         width: 60vw; /* Slightly larger on smaller screens */
         
     }
+
+    #projects .project-container {
+        flex-direction: column;
+      }
+    
+      #projects .project-logo {
+        width: 60%;
+        max-width: none;
+      }
+    
+      #projects .project-description {
+        text-align: center;
+      }
+    
 
     .logo img {
       height: 50px; /* Slightly reduce logo size on mobile */
