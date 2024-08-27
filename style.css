@@ -176,7 +176,7 @@ section p {
   
   #projects .project-logo {
     width: 25vw; /* 40% of the viewport width */
-    max-width: 600px; /* Maximum size */
+    max-width: 400px; /* Maximum size */
     min-width: 200px; /* Minimum size */
     height: auto;
   }
