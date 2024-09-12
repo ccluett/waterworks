@@ -60,6 +60,10 @@ main {
     flex: 1;
 }
 
+a {
+    color: rgb(134, 159, 245);
+  }
+
 section {
     min-height: 100vh;
     display: flex;
