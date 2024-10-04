@@ -281,6 +281,7 @@ footer {
     
     .home-content {
         flex-direction: column;
+        height: auto;
     }
 
     .home-text {
@@ -288,7 +289,9 @@ footer {
     }
 
     .home-image {
-        height: 50vh; /* Adjust height on mobile */
+        min-height: 50vh; /* Adjust height on mobile */
+        height: auto;
+        flex: none;
     }
   }
   
