@@ -225,7 +225,7 @@ footer {
     }
   
     .project-logo {
-        width: 60vw; /* Slightly larger on smaller screens */
+        width: 40vw; /* Slightly larger on smaller screens */
         
     }
 
@@ -240,7 +240,9 @@ footer {
     
       #projects .project-logo {
         width: 90%;
-        max-width: 1200px;
+        height: auto;
+        max-width: 400px;
+        margin-bottom: 0px;
       }
     
       #projects .project-description {
