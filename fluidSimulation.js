@@ -2,6 +2,8 @@ class FluidSimulation {
     constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        this.hasInitialized = false;  // Track if simulation has been initialized
+        this.options = options;  // Store options for resize
 
         // Simulation size
         this.width = canvas.width;
@@ -25,19 +27,21 @@ class FluidSimulation {
         this.viscosity = options.viscosity || 0.002;
         this.running = true;
 
-        // Create arrays
+        // Create/recreate size-dependent arrays
         this.initArrays();
-
-        // ImageData for pixel manipulation
+        
+        // Initialize visualization components
         this.imageData = this.ctx.createImageData(this.width, this.height);
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
-        // Prepare colors with improved contrast
-        this.initColors();
+        // Initialize colors only once
+        if (!this.colors) {
+            this.initColors();
+        }
 
-        // Initialize fluid
+        // Initialize fluid state
         this.initFluid();
 
         // Add airfoil barrier
@@ -47,7 +51,7 @@ class FluidSimulation {
             angle: 6.17
         });
 
-        // Start simulation
+        // Start the simulation
         this.update();
     }
 
@@ -354,7 +358,7 @@ class FluidSimulation {
         if (!this.running) return;
 
         // Perform multiple simulation steps per frame
-        const stepsPerFrame = 3;
+        const stepsPerFrame = 1;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -366,33 +370,40 @@ class FluidSimulation {
     }
 
     resize(width, height) {
+        // Update canvas dimensions
         this.canvas.width = Math.max(width, 600);
         this.canvas.height = Math.max(height, 400);
         this.width = this.canvas.width;
         this.height = this.canvas.height;
 
-        // Maintain high resolution while resizing
+        // Update dimensions while preserving simulation state
         this.xdim = Math.floor(this.width / this.pxPerSquare);
         this.ydim = Math.floor(this.height / this.pxPerSquare);
+        if (this.xdim < 50) this.xdim = 50;
+        if (this.ydim < 50) this.ydim = 50;
 
+        // Reinitialize size-dependent arrays
         this.initArrays();
         this.imageData = this.ctx.createImageData(this.width, this.height);
-        
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
+        // Reinitialize fluid state
         this.initFluid();
         this.addNACABarrier({
-            chordFraction: 1/6,
+            chordFraction: 1/3.5,
             thickness: 0.12,
-            angle: 6.2
+            angle: 6.17
         });
+
+        // Just redraw, don't restart animation loop
         this.draw();
     }
+
 }
 
-// Initialize with improved settings
+// Initialize with improved event handling
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.querySelector('.home-image');
     if (!container) {
@@ -413,16 +424,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,       // Match original simulation's default resolution
-        flowSpeed: 0.3,       // Similar to original simulation
+        pxPerSquare: 2,
+        flowSpeed: 0.3,
         flowAngleDeg: 0,
-        viscosity: .3     // Match original simulation's default viscosity
+        viscosity: .3
     });
 
-    // Efficient resize handling
+    // Debounced resize handler
     let resizeTimeout;
     window.addEventListener('resize', () => {
-        clearTimeout(resizeTimeout);
+        if (resizeTimeout) {
+            clearTimeout(resizeTimeout);
+        }
         resizeTimeout = setTimeout(() => {
             const r = container.getBoundingClientRect();
             simulation.resize(Math.floor(r.width), Math.floor(r.height));
