@@ -1,6 +1,6 @@
-/**
+/*
  * fluidSimulation.js
- * LBM with airfoil barrier. Plots velocity magnitude rather than curl.
+ * LBM with airfoil.
  */
 
 class FluidSimulation {
@@ -50,7 +50,7 @@ class FluidSimulation {
 
         // 2) Add the airfoil barrier (zero out fluid in barrier cells)
         this.addNACABarrier({
-            chordFraction: 1/4,
+            chordFraction: 1/3,
             thickness: 0.12,
             angle: this.currentAngle
         });
@@ -74,7 +74,6 @@ class FluidSimulation {
         this.ux  = new Float32Array(size);
         this.uy  = new Float32Array(size);
 
-        // We'll also store speed if you like, or compute on the fly
         this.speed = new Float32Array(size);
 
         this.barriers = new Uint8Array(size);
@@ -369,9 +368,6 @@ class FluidSimulation {
         }
     }
 
-    /**
-     * computeSpeed: fill this.speed[] with sqrt(ux^2 + uy^2).
-     */
     computeSpeed() {
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
@@ -383,14 +379,37 @@ class FluidSimulation {
         }
     }
 
-    /**
-     * draw: color by velocity magnitude instead of curl
-     */
-    draw() {
-        this.computeSpeed(); // or could do on the fly
+    // draw() {
+    //     this.computeCurl();
 
-        // scale factor for speed -> color index
-        const scale = 2000; // adjust as needed
+    //     const contrast = 15;
+    //     for (let y = 0; y < this.ydim; y++) {
+    //         for (let x = 0; x < this.xdim; x++) {
+    //             const i = x + y * this.xdim;
+                
+    //             if (this.barriers[i]) {
+    //                 // barrier in white
+    //                 this.fillSquare(x, y, 255, 255, 255);
+    //                 continue;
+    //             }
+
+    //             // Color based on curl
+    //             let colorIndex = Math.floor((this.curl[i] * contrast + 0.5) * (this.nColors / 2));
+    //             colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
+
+    //             const c = this.colors[colorIndex];
+    //             this.fillSquare(x, y, c.r, c.g, c.b);
+    //         }
+    //     }
+
+    //     this.ctx.putImageData(this.imageData, 0, 0);
+    // }
+
+
+    draw() {
+        this.computeSpeed();
+
+        const scale = 2000;
 
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
@@ -430,7 +449,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 10;
+        const stepsPerFrame = 3;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -495,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.cursor = 'default';
     controlsDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 10px;">
-            <strong>Airfoil Angle</strong>
+            <strong>Angle of Attack</strong>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
             <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
@@ -513,10 +532,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,
-        flowSpeed: 0.2,
+        pxPerSquare: 3,
+        flowSpeed: 0.1,
         flowAngleDeg: 0,
-        viscosity: .3
+        viscosity: .2
     });
 
     // Set up angle control handlers
@@ -525,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateAngleDisplay = () => {
         const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
         const radians = simulation.currentAngle.toFixed(2);
-        angleDisplay.innerHTML = `${radians} rad<br>${degrees}°`;
+        angleDisplay.innerHTML = `${radians*-1} rad<br>${degrees*-1}°`;
     };
     updateAngleDisplay();
 
