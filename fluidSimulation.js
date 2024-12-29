@@ -1,7 +1,5 @@
-/*
- * fluidSimulation.js
- * LBM with airfoil.
- */
+// fluidSimulation.js  //
+    /* LBM with airfoil */
 
 class FluidSimulation {
     constructor(canvas, options = {}) {
@@ -48,7 +46,7 @@ class FluidSimulation {
         // 1) Initialize domain at rest
         this.initFluid();
 
-        // 2) Add the airfoil barrier (zero out fluid in barrier cells)
+        // 2) Add the airfoil barrier (polygon fill)
         this.addNACABarrier({
             chordFraction: 1/3,
             thickness: 0.12,
@@ -80,9 +78,9 @@ class FluidSimulation {
     }
 
     initFluid() {
+        // Set the entire domain to rest (u=0) with rho=1
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
-                // rest: (u=0), density=1
                 this.setEquilibrium(x, y, 0, 0, 1);
             }
         }
@@ -123,7 +121,8 @@ class FluidSimulation {
                 b = 0;
             } else {
                 r = Math.round(255 * (1.125 - phase) / 0.25);
-                g = 0; b = 0;
+                g = 0; 
+                b = 0;
             }
             this.colors[i] = { r, g, b };
         }
@@ -154,11 +153,15 @@ class FluidSimulation {
         this.uy[i]  = uy;
     }
 
+
+     //  AIRFOIL GENERATION  // 
+
     addNACABarrier({ chordFraction = 1/3, thickness = 0.12, angle = 0 }) {
         const chordLength = Math.floor(this.xdim * chordFraction);
         const centerX = Math.floor(this.xdim / 3);
         const centerY = Math.floor(this.ydim / 2);
 
+        // NACA thickness function
         const nacaThickness = (xFrac) => {
             return (thickness / 0.2) * chordLength * (
                 0.2969 * Math.sqrt(xFrac) -
@@ -169,47 +172,118 @@ class FluidSimulation {
             );
         };
 
+        // 1) Generate top/bottom edges
+        const { topPoints, botPoints } = this._generateAirfoilPoints(
+            chordLength, centerX, centerY, angle, nacaThickness
+        );
+
+        // 2) Build a closed polygon
+        const polygon = this._buildAirfoilPolygon(topPoints, botPoints);
+
+        // 3) Fill polygon into this.barriers
+        this._fillPolygon(polygon, this.barriers);
+
+        // 4) Zero out fluid in all barrier cells
+        this._zeroOutBarrierCells();
+    }
+
+     // Generate top & bottom edge points for chord slices
+    _generateAirfoilPoints(chordLength, centerX, centerY, angle, thicknessFunc) {
         const cosAng = Math.cos(angle);
         const sinAng = Math.sin(angle);
 
+        const topPoints = [];
+        const botPoints = [];
+
         for (let i = 0; i <= chordLength; i++) {
             const xFrac = i / chordLength;
-            const halfThick = nacaThickness(xFrac);
+            const halfThick = thicknessFunc(xFrac);
 
-            const xTop = Math.round(centerX + i * cosAng - halfThick * sinAng);
-            const yTop = Math.round(centerY + i * sinAng + halfThick * cosAng);
-            const xBot = Math.round(centerX + i * cosAng + halfThick * sinAng);
-            const yBot = Math.round(centerY + i * sinAng - halfThick * cosAng);
+            // mid-chord point
+            const xMid = centerX + i * cosAng;
+            const yMid = centerY + i * sinAng;
 
-            this.fillBarrierLine(xTop, yTop, xBot, yBot);
+            // offset top & bottom
+            const xTop = Math.round(xMid - halfThick * sinAng);
+            const yTop = Math.round(yMid + halfThick * cosAng);
+            const xBot = Math.round(xMid + halfThick * sinAng);
+            const yBot = Math.round(yMid - halfThick * cosAng);
+
+            topPoints.push({ x: xTop, y: yTop });
+            botPoints.push({ x: xBot, y: yBot });
         }
 
-        // Zero out fluid in barrier cells
-        for (let idx = 0; idx < this.barriers.length; idx++) {
-            if (this.barriers[idx] === 1) {
-                this.n0[idx]  = 0;  this.nN[idx]  = 0;  this.nS[idx]  = 0;
-                this.nE[idx]  = 0;  this.nW[idx]  = 0;  this.nNE[idx] = 0;
-                this.nSE[idx] = 0;  this.nNW[idx] = 0;  this.nSW[idx] = 0;
+        return { topPoints, botPoints };
+    }
 
-                this.rho[idx] = 0; 
-                this.ux[idx]  = 0;  
-                this.uy[idx]  = 0;
+     // Create a single closed polygon from top & bottom edges
+    _buildAirfoilPolygon(topPoints, botPoints) {
+        // Reverse the bottom array so we get a continuous loop
+        const reversedBot = botPoints.slice().reverse();
+        // Combine them
+        const polygon = topPoints.concat(reversedBot);
+        return polygon;
+    }
+
+    
+     // Fill the polygon via a simple scan-line approach
+    _fillPolygon(polygon, barrierArray) {
+        // 1. Find bounding box
+        let minY = Infinity, maxY = -Infinity;
+        for (const pt of polygon) {
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > maxY) maxY = pt.y;
+        }
+        // clamp to domain
+        minY = Math.max(0, minY);
+        maxY = Math.min(this.ydim - 1, maxY);
+
+        // 2. For each y, find x-intersections
+        for (let y = minY; y <= maxY; y++) {
+            const xIntersections = [];
+            for (let i = 0; i < polygon.length; i++) {
+                const p1 = polygon[i];
+                const p2 = polygon[(i+1) % polygon.length];
+                // check if line (p1->p2) crosses horizontal line at y
+                if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y)) {
+                    const dy = p2.y - p1.y;
+                    const t = (y - p1.y) / dy;
+                    const xInt = p1.x + (p2.x - p1.x) * t;
+                    xIntersections.push(Math.round(xInt));
+                }
+            }
+            xIntersections.sort((a,b)=>a-b);
+
+            // 3. fill pairs of intersections
+            for (let k = 0; k < xIntersections.length - 1; k += 2) {
+                const xStart = xIntersections[k];
+                const xEnd   = xIntersections[k+1];
+                for (let x = xStart; x <= xEnd; x++) {
+                    if (x >= 0 && x < this.xdim) {
+                        barrierArray[x + y*this.xdim] = 1;
+                    }
+                }
             }
         }
     }
 
-    fillBarrierLine(x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+     // Zero out fluid in barrier cells
+    _zeroOutBarrierCells() {
+        for (let i = 0; i < this.barriers.length; i++) {
+            if (this.barriers[i] === 1) {
+                this.n0[i]  = 0;  
+                this.nN[i]  = 0;  
+                this.nS[i]  = 0;
+                this.nE[i]  = 0;  
+                this.nW[i]  = 0;  
+                this.nNE[i] = 0;
+                this.nSE[i] = 0;  
+                this.nNW[i] = 0;  
+                this.nSW[i] = 0;
 
-        for (let s = 0; s <= steps; s++) {
-            const frac = s / steps;
-            const x = Math.round(x1 + frac * dx);
-            const y = Math.round(y1 + frac * dy);
-            const idx = x + y * this.xdim;
-            if (idx >= 0 && idx < this.barriers.length) {
-                this.barriers[idx] = 1;
+                this.rho[i] = 0; 
+                this.ux[i]  = 0;  
+                this.uy[i]  = 0;
             }
         }
     }
@@ -379,38 +453,10 @@ class FluidSimulation {
         }
     }
 
-    // draw() {
-    //     this.computeCurl();
-
-    //     const contrast = 15;
-    //     for (let y = 0; y < this.ydim; y++) {
-    //         for (let x = 0; x < this.xdim; x++) {
-    //             const i = x + y * this.xdim;
-                
-    //             if (this.barriers[i]) {
-    //                 // barrier in white
-    //                 this.fillSquare(x, y, 255, 255, 255);
-    //                 continue;
-    //             }
-
-    //             // Color based on curl
-    //             let colorIndex = Math.floor((this.curl[i] * contrast + 0.5) * (this.nColors / 2));
-    //             colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
-
-    //             const c = this.colors[colorIndex];
-    //             this.fillSquare(x, y, c.r, c.g, c.b);
-    //         }
-    //     }
-
-    //     this.ctx.putImageData(this.imageData, 0, 0);
-    // }
-
-
     draw() {
         this.computeSpeed();
-
-        const scale = 2000;
-
+    
+        const scale = 2000;  // same as your velocity->color indexing
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -420,19 +466,64 @@ class FluidSimulation {
                     this.fillSquare(x, y, 255, 255, 255);
                     continue;
                 }
-
+    
                 const spd = this.speed[i];
                 let colorIndex = Math.floor(spd * scale);
-                // clamp to [0, nColors-1]
                 colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
-
+    
                 const c = this.colors[colorIndex];
                 this.fillSquare(x, y, c.r, c.g, c.b);
             }
         }
+        // Put the simulation pixels onto the canvas
         this.ctx.putImageData(this.imageData, 0, 0);
+    
+        // Now draw the horizontal legend at the bottom left
+        this.drawLegend(scale);
     }
-
+        
+    drawLegend(scale) {
+        const ctx = this.ctx;
+    
+        // Legend dimensions
+        const barWidth = 200;
+        const barHeight = 20;
+    
+        // Position
+        const xOffset = 10;
+        const yOffset = this.height - barHeight - 10; // 10 px padding from bottom
+    
+        for (let col = 0; col < barWidth; col++) {
+            // fraction from 0..1
+            const frac = col / barWidth;
+            // pick color index
+            const colorIndex = Math.floor(frac * (this.nColors - 1));
+            const c = this.colors[colorIndex];
+    
+            // set fillStyle
+            ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
+            // draw a thin vertical strip
+            ctx.fillRect(xOffset + col, yOffset, 1, barHeight);
+        }
+    
+        // // Draw an outline around the color bar
+        // ctx.strokeStyle = 'white';
+        // ctx.lineWidth = 1;
+        // ctx.strokeRect(xOffset, yOffset, barWidth, barHeight);
+    
+        // Label the min and max speeds
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+    
+        // Min speed label
+        ctx.fillText('0', xOffset, yOffset - 2); // a little above the bar
+        // Max speed label
+        const maxSpeed = ((this.nColors - 1) / scale).toFixed(2);
+        const textWidth = ctx.measureText(maxSpeed).width;
+        ctx.fillText(maxSpeed, xOffset + barWidth - textWidth, yOffset - 2);
+    }
+    
+    
     fillSquare(x, y, r, g, b) {
         const flippedY = this.ydim - y - 1;
         for (let py = flippedY * this.pxPerSquare; py < (flippedY + 1) * this.pxPerSquare; py++) {
@@ -449,7 +540,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 3;
+        const stepsPerFrame = 5;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -479,9 +570,9 @@ class FluidSimulation {
 
         this.initFluid();
         this.addNACABarrier({
-            chordFraction: 1/3.5,
+            chordFraction: 1/6,
             thickness: 0.12,
-            angle: 6.17
+            angle: 0
         });
 
         this.draw();
@@ -532,14 +623,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 3,
+        pxPerSquare: 1,
         flowSpeed: 0.1,
         flowAngleDeg: 0,
         viscosity: .2
     });
 
     // Set up angle control handlers
-    const stepSize = 0.05; // About 2.86 degrees
+    const stepSize = 0.0349066; // About 2 degrees
     const angleDisplay = document.getElementById('angleDisplay');
     const updateAngleDisplay = () => {
         const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
