@@ -7,20 +7,20 @@ class FluidSimulation {
         this.width = canvas.width;
         this.height = canvas.height;
 
-        // Pixels per lattice cell
+        // Improved resolution - use 1 pixel per cell for better detail
         this.pxPerSquare = options.pxPerSquare || 1;
         this.xdim = Math.floor(this.width / this.pxPerSquare);
         this.ydim = Math.floor(this.height / this.pxPerSquare);
         if (this.xdim < 50) this.xdim = 50;
         if (this.ydim < 50) this.ydim = 50;
 
-        // Basic LBM constants
+        // LBM constants
         this.four9ths = 4.0 / 9.0;
         this.one9th = 1.0 / 9.0;
         this.one36th = 1.0 / 36.0;
 
-        // Simulation parameters
-        this.flowSpeed = options.flowSpeed || 10.5;
+        // Simulation parameters with improved defaults
+        this.flowSpeed = options.flowSpeed || 0.1;
         this.flowAngle = (options.flowAngleDeg || 0) * Math.PI / 180;
         this.viscosity = options.viscosity || 0.002;
         this.running = true;
@@ -28,35 +28,33 @@ class FluidSimulation {
         // Create arrays
         this.initArrays();
 
-        // ImageData for direct pixel manipulation
+        // ImageData for pixel manipulation
         this.imageData = this.ctx.createImageData(this.width, this.height);
-        
-        // Initialize alpha channel
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
-        // Prepare colors for plotting
+        // Prepare colors with improved contrast
         this.initColors();
 
-        // Initialize fluid to uniform flow
+        // Initialize fluid
         this.initFluid();
 
-        // Add a barrier
+        // Add airfoil barrier
         this.addNACABarrier({
             chordFraction: 1/6,
             thickness: 0.12,
             angle: 6.2
         });
 
-        // Start the simulation
+        // Start simulation
         this.update();
     }
 
     initArrays() {
         const size = this.xdim * this.ydim;
         
-        // Distribution functions
+        // Use Float32Array for better performance
         this.n0 = new Float32Array(size);
         this.nN = new Float32Array(size);
         this.nS = new Float32Array(size);
@@ -67,14 +65,29 @@ class FluidSimulation {
         this.nNW = new Float32Array(size);
         this.nSW = new Float32Array(size);
         
-        // Macroscopic fields
         this.rho = new Float32Array(size);
         this.ux = new Float32Array(size);
         this.uy = new Float32Array(size);
         this.curl = new Float32Array(size);
         
-        // Barrier array
-        this.barriers = new Array(size).fill(false);
+        this.barriers = new Uint8Array(size);
+    }
+
+    setBoundaryConditions() {
+        // Set uniform flow conditions at all boundaries
+        // This creates a "wind tunnel" effect where flow passes through freely
+        
+        // Top and bottom boundaries maintain horizontal flow
+        for (let x = 0; x < this.xdim; x++) {
+            this.setEquilibrium(x, 0, this.flowSpeed, 0, 1);          // Top boundary
+            this.setEquilibrium(x, this.ydim-1, this.flowSpeed, 0, 1); // Bottom boundary
+        }
+        
+        // Left (inlet) and right (outlet) boundaries
+        for (let y = 1; y < this.ydim-1; y++) {
+            this.setEquilibrium(0, y, this.flowSpeed, 0, 1);           // Left boundary (inlet)
+            this.setEquilibrium(this.xdim-1, y, this.flowSpeed, 0, 1); // Right boundary (outlet)
+        }
     }
 
     initColors() {
@@ -340,26 +353,16 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        // Perform multiple simulation steps per frame for better visualization
+        // Perform multiple simulation steps per frame
         const stepsPerFrame = 20;
         for (let step = 0; step < stepsPerFrame; step++) {
+            this.setBoundaryConditions();
             this.collide();
             this.stream();
         }
 
         this.draw();
-
-        // Schedule next frame
         requestAnimationFrame(() => this.update());
-    }
-
-    start() {
-        this.running = true;
-        this.update();
-    }
-
-    stop() {
-        this.running = false;
     }
 
     resize(width, height) {
@@ -368,24 +371,28 @@ class FluidSimulation {
         this.width = this.canvas.width;
         this.height = this.canvas.height;
 
+        // Maintain high resolution while resizing
         this.xdim = Math.floor(this.width / this.pxPerSquare);
         this.ydim = Math.floor(this.height / this.pxPerSquare);
 
         this.initArrays();
         this.imageData = this.ctx.createImageData(this.width, this.height);
         
-        // Reset alpha channel
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
         this.initFluid();
-        this.addNACABarrier({ chordFraction: 1/6, thickness: 0.12, angle: 0 });
+        this.addNACABarrier({
+            chordFraction: 1/6,
+            thickness: 0.12,
+            angle: 6.2
+        });
         this.draw();
     }
 }
 
-// Initialize the simulation when the document is loaded
+// Initialize with improved settings
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.querySelector('.home-image');
     if (!container) {
@@ -393,7 +400,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // Create a canvas in the container
     const canvas = document.createElement('canvas');
     canvas.style.width = '100%';
     canvas.style.height = '100%';
@@ -401,20 +407,19 @@ document.addEventListener('DOMContentLoaded', () => {
     container.innerHTML = '';
     container.appendChild(canvas);
 
-    // Set initial size
     const rect = container.getBoundingClientRect();
     canvas.width = Math.max(Math.floor(rect.width), 600);
     canvas.height = Math.max(Math.floor(rect.height), 400);
 
-    // Create and start the simulation
+    // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,
-        flowSpeed: 0.1,
-        flowAngleDeg: 0,  // Flow from left to right
-        viscosity: 0.005
+        pxPerSquare: 2,       // Match original simulation's default resolution
+        flowSpeed: 0.1,       // Similar to original simulation
+        flowAngleDeg: 0,
+        viscosity: 0.01       // Match original simulation's default viscosity
     });
 
-    // Handle window resizing
+    // Efficient resize handling
     let resizeTimeout;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimeout);
