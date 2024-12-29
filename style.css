@@ -120,7 +120,7 @@ section p {
 .home-badge img {
   width: 300px;
   height: auto;
-  /* border-radius: 50%; */
+  border-radius: 10%;
 }
 .home-text h1 {
     font-size: 2em;
