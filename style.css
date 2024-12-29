@@ -114,14 +114,16 @@ section p {
 }
 
 .home-badge {
-  margin-bottom: 5px;
+  margin-bottom: 15px;
 }
 
 .home-badge img {
-  width: 300px;
+  width: 30vw;
+  max-width: 300px;
+  min-width: 50px;
   height: auto;
-  border-radius: 10%;
 }
+
 .home-text h1 {
     font-size: 2em;
     line-height: 1.4;
@@ -273,9 +275,11 @@ footer {
       max-width: 1200px;
     }
   
-  .home-badge img {
-    width: 40vw;
-    }
+
+      .home-badge img {
+          width: 40vw;
+          max-width: 300px;
+      }
     
     #projects .project-container {
         flex-direction: column;
