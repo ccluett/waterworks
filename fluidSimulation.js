@@ -4,7 +4,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;  // Track if simulation has been initialized
         this.options = options;  // Store options for resize
-        this.currentAngle = 6.17;  // Store current angle in radians
+        this.currentAngle = 0;  // Store current angle in radians
 
         // Simulation size
         this.width = canvas.width;
@@ -23,9 +23,9 @@ class FluidSimulation {
         this.one36th = 1.0 / 36.0;
 
         // Simulation parameters with improved defaults
-        this.flowSpeed = options.flowSpeed || 0.1;
+        this.flowSpeed = options.flowSpeed || 0.2;
         this.flowAngle = (options.flowAngleDeg || 0) * Math.PI / 180;
-        this.viscosity = options.viscosity || 0.002;
+        this.viscosity = options.viscosity || 0.01;
         this.running = true;
 
         // Create/recreate size-dependent arrays
@@ -47,7 +47,7 @@ class FluidSimulation {
 
         // Add airfoil barrier with current angle
         this.addNACABarrier({
-            chordFraction: 1/3.5,
+            chordFraction: 1/3,
             thickness: 0.12,
             angle: this.currentAngle
         });
@@ -78,6 +78,18 @@ class FluidSimulation {
         this.barriers = new Uint8Array(size);
     }
 
+    initFluid() {
+        // Initialize to a uniform rightward flow
+        for (let y = 0; y < this.ydim; y++) {
+            for (let x = 0; x < this.xdim; x++) {
+                this.setEquilibrium(x, y, this.flowSpeed, 0, 1);
+            }
+        }
+        
+        // Set proper boundary conditions
+        this.setBoundaryConditions();
+    }
+
     setBoundaryConditions() {
         // Set uniform flow conditions at all boundaries
         // This creates a "wind tunnel" effect where flow passes through freely
@@ -93,6 +105,18 @@ class FluidSimulation {
             this.setEquilibrium(0, y, this.flowSpeed, 0, 1);           // Left boundary (inlet)
             this.setEquilibrium(this.xdim-1, y, this.flowSpeed, 0, 1); // Right boundary (outlet)
         }
+    }
+
+    updateAngle(newAngle) {
+        this.currentAngle = newAngle;
+        // Reinitialize with new angle
+        this.initArrays();
+        this.initFluid();
+        this.addNACABarrier({
+            chordFraction: 1/3.5,
+            thickness: 0.12,
+            angle: this.currentAngle
+        });
     }
 
     initColors() {
@@ -127,17 +151,6 @@ class FluidSimulation {
         }
     }
 
-    initFluid() {
-        const cosA = Math.cos(this.flowAngle);
-        const sinA = Math.sin(this.flowAngle);
-        
-        for (let y = 0; y < this.ydim; y++) {
-            for (let x = 0; x < this.xdim; x++) {
-                this.setEquilibrium(x, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
-            }
-        }
-    }
-
     setEquilibrium(x, y, ux, uy, rho) {
         const i = x + y * this.xdim;
         const ux3 = 3 * ux;
@@ -163,19 +176,7 @@ class FluidSimulation {
         this.uy[i] = uy;
     }
 
-    updateAngle(newAngle) {
-        this.currentAngle = newAngle;
-        // Reinitialize with new angle
-        this.initArrays();
-        this.initFluid();
-        this.addNACABarrier({
-            chordFraction: 1/3.5,
-            thickness: 0.12,
-            angle: this.currentAngle
-        });
-    }
-
-    addNACABarrier({ chordFraction = 1/6, thickness = 0.12, angle = 0 }) {
+    addNACABarrier({ chordFraction = 1/3, thickness = 0.12, angle = 0 }) {
         const chordLength = Math.floor(this.xdim * chordFraction);
         const centerX = Math.floor(this.xdim / 3);
         const centerY = Math.floor(this.ydim / 2);
@@ -371,7 +372,7 @@ class FluidSimulation {
         if (!this.running) return;
 
         // Perform multiple simulation steps per frame
-        const stepsPerFrame = 2;
+        const stepsPerFrame = 10;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -429,7 +430,30 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.style.height = '100%';
     canvas.style.backgroundColor = 'black';
     container.innerHTML = '';
+    
+    // Create controls container
+    const controlsDiv = document.createElement('div');
+    controlsDiv.style.position = 'absolute';
+    controlsDiv.style.bottom = '20px';
+    controlsDiv.style.right = '20px';
+    controlsDiv.style.backgroundColor = 'rgba(105, 193, 255, 0.9)';
+    controlsDiv.style.padding = '10px';
+    controlsDiv.style.borderRadius = '5px';
+    controlsDiv.style.zIndex = '1000';  // Ensure controls are above the canvas
+    controlsDiv.style.cursor = 'default';
+    controlsDiv.innerHTML = `
+        <div style="text-align: center; margin-bottom: 10px;">
+            <strong>Airfoil Angle</strong>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↓</button>
+            <div id="angleDisplay" style="font-family: monospace; min-width: 80px; text-align: center;"></div>
+            <button id="increaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
+        </div>
+    `;
+    
     container.appendChild(canvas);
+    container.appendChild(controlsDiv);
 
     const rect = container.getBoundingClientRect();
     canvas.width = Math.max(Math.floor(rect.width), 600);
@@ -437,10 +461,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,
-        flowSpeed: 0.3,
+        pxPerSquare: 3,
+        flowSpeed: 0.2,
         flowAngleDeg: 0,
-        viscosity: .2
+        viscosity: .1
+    });
+
+    // Set up angle control handlers
+    const stepSize = 0.05; // About 2.86 degrees
+    const angleDisplay = document.getElementById('angleDisplay');
+    const updateAngleDisplay = () => {
+        const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
+        const radians = simulation.currentAngle.toFixed(2);
+        angleDisplay.innerHTML = `${radians} rad<br>${degrees}°`;
+    };
+    updateAngleDisplay();
+
+    document.getElementById('increaseAngle').addEventListener('click', () => {
+        simulation.updateAngle(simulation.currentAngle + stepSize);
+        updateAngleDisplay();
+    });
+
+    document.getElementById('decreaseAngle').addEventListener('click', () => {
+        simulation.updateAngle(simulation.currentAngle - stepSize);
+        updateAngleDisplay();
     });
 
     // Debounced resize handler
