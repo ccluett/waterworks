@@ -114,12 +114,12 @@ section p {
 }
 
 .home-badge {
-  margin-bottom: 15px;
+  margin-bottom: 5px;
 }
 
 .home-badge img {
   width: 30vw;
-  max-width: 300px;
+  max-width: 260px;
   min-width: 50px;
   height: auto;
 }
