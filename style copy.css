@@ -112,7 +112,7 @@ section p {
 
 .home-image {
     flex: 1;
-    /* background-image: url('pictures/enter-1a.jpeg'); */
+    background-image: url('pictures/enter-1a.jpeg');
     background-size: cover;
     background-position: center;
 }
