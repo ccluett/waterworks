@@ -117,6 +117,20 @@ section p {
     background-position: center;
 }
 
+.home-image {
+  flex: 1;
+  display: flex; 
+  justify-content: center;
+  align-items: center; 
+}
+
+/* .home-image-img {
+  width: 30vw;         
+  max-width: 600px;
+  min-width: 50px;
+  height: auto;
+} */
+
 #services ul {
     list-style-type: disc;
     padding-left: 20px;
