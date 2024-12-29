@@ -42,9 +42,9 @@ class FluidSimulation {
 
         // Add airfoil barrier
         this.addNACABarrier({
-            chordFraction: 1/6,
+            chordFraction: 1/3.5,
             thickness: 0.12,
-            angle: 6.2
+            angle: 6.17
         });
 
         // Start simulation
@@ -315,7 +315,7 @@ class FluidSimulation {
         this.computeCurl();
 
         // Draw the fluid
-        const contrast = 12;
+        const contrast = 15;
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -354,7 +354,7 @@ class FluidSimulation {
         if (!this.running) return;
 
         // Perform multiple simulation steps per frame
-        const stepsPerFrame = 20;
+        const stepsPerFrame = 3;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -414,9 +414,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
         pxPerSquare: 2,       // Match original simulation's default resolution
-        flowSpeed: 0.2,       // Similar to original simulation
+        flowSpeed: 0.3,       // Similar to original simulation
         flowAngleDeg: 0,
-        viscosity: .25      // Match original simulation's default viscosity
+        viscosity: .3     // Match original simulation's default viscosity
     });
 
     // Efficient resize handling
