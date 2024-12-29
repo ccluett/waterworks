@@ -4,6 +4,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;  // Track if simulation has been initialized
         this.options = options;  // Store options for resize
+        this.currentAngle = 6.17;  // Store current angle in radians
 
         // Simulation size
         this.width = canvas.width;
@@ -44,11 +45,11 @@ class FluidSimulation {
         // Initialize fluid state
         this.initFluid();
 
-        // Add airfoil barrier
+        // Add airfoil barrier with current angle
         this.addNACABarrier({
             chordFraction: 1/3.5,
             thickness: 0.12,
-            angle: 6.17
+            angle: this.currentAngle
         });
 
         // Start the simulation
@@ -160,6 +161,18 @@ class FluidSimulation {
         this.rho[i] = rho;
         this.ux[i] = ux;
         this.uy[i] = uy;
+    }
+
+    updateAngle(newAngle) {
+        this.currentAngle = newAngle;
+        // Reinitialize with new angle
+        this.initArrays();
+        this.initFluid();
+        this.addNACABarrier({
+            chordFraction: 1/3.5,
+            thickness: 0.12,
+            angle: this.currentAngle
+        });
     }
 
     addNACABarrier({ chordFraction = 1/6, thickness = 0.12, angle = 0 }) {
@@ -358,7 +371,7 @@ class FluidSimulation {
         if (!this.running) return;
 
         // Perform multiple simulation steps per frame
-        const stepsPerFrame = 1;
+        const stepsPerFrame = 2;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -427,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pxPerSquare: 2,
         flowSpeed: 0.3,
         flowAngleDeg: 0,
-        viscosity: .3
+        viscosity: .2
     });
 
     // Debounced resize handler
