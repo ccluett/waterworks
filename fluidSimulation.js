@@ -1,16 +1,19 @@
+/**
+ * fluidSimulation.js
+ * LBM with airfoil barrier. Plots velocity magnitude rather than curl.
+ */
+
 class FluidSimulation {
     constructor(canvas, options = {}) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.hasInitialized = false;  // Track if simulation has been initialized
-        this.options = options;  // Store options for resize
-        this.currentAngle = 0;  // Store current angle in radians
+        this.hasInitialized = false;
+        this.options = options;
+        this.currentAngle = 0; 
 
-        // Simulation size
+        // Dimensions
         this.width = canvas.width;
         this.height = canvas.height;
-
-        // Improved resolution - use 1 pixel per cell for better detail
         this.pxPerSquare = options.pxPerSquare || 1;
         this.xdim = Math.floor(this.width / this.pxPerSquare);
         this.ydim = Math.floor(this.height / this.pxPerSquare);
@@ -22,94 +25,72 @@ class FluidSimulation {
         this.one9th = 1.0 / 9.0;
         this.one36th = 1.0 / 36.0;
 
-        // Simulation parameters with improved defaults
+        // Simulation parameters
         this.flowSpeed = options.flowSpeed || 0.2;
         this.flowAngle = (options.flowAngleDeg || 0) * Math.PI / 180;
         this.viscosity = options.viscosity || 0.01;
         this.running = true;
 
-        // Create/recreate size-dependent arrays
+        // Arrays
         this.initArrays();
-        
-        // Initialize visualization components
+
+        // imageData for rendering
         this.imageData = this.ctx.createImageData(this.width, this.height);
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
-        // Initialize colors only once
+        // Initialize color map
         if (!this.colors) {
             this.initColors();
         }
 
-        // Initialize fluid state
+        // 1) Initialize domain at rest
         this.initFluid();
 
-        // Add airfoil barrier with current angle
+        // 2) Add the airfoil barrier (zero out fluid in barrier cells)
         this.addNACABarrier({
-            chordFraction: 1/3,
+            chordFraction: 1/4,
             thickness: 0.12,
             angle: this.currentAngle
         });
 
-        // Start the simulation
+        // 3) Start simulation
         this.update();
     }
 
     initArrays() {
         const size = this.xdim * this.ydim;
-        
-        // Use Float32Array for better performance
-        this.n0 = new Float32Array(size);
-        this.nN = new Float32Array(size);
-        this.nS = new Float32Array(size);
-        this.nE = new Float32Array(size);
-        this.nW = new Float32Array(size);
+        this.n0  = new Float32Array(size);
+        this.nN  = new Float32Array(size);
+        this.nS  = new Float32Array(size);
+        this.nE  = new Float32Array(size);
+        this.nW  = new Float32Array(size);
         this.nNE = new Float32Array(size);
         this.nSE = new Float32Array(size);
         this.nNW = new Float32Array(size);
         this.nSW = new Float32Array(size);
-        
         this.rho = new Float32Array(size);
-        this.ux = new Float32Array(size);
-        this.uy = new Float32Array(size);
-        this.curl = new Float32Array(size);
-        
+        this.ux  = new Float32Array(size);
+        this.uy  = new Float32Array(size);
+
+        // We'll also store speed if you like, or compute on the fly
+        this.speed = new Float32Array(size);
+
         this.barriers = new Uint8Array(size);
     }
 
     initFluid() {
-        // Initialize to a uniform rightward flow
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
-                this.setEquilibrium(x, y, this.flowSpeed, 0, 1);
+                // rest: (u=0), density=1
+                this.setEquilibrium(x, y, 0, 0, 1);
             }
-        }
-        
-        // Set proper boundary conditions
-        this.setBoundaryConditions();
-    }
-
-    setBoundaryConditions() {
-        // Set uniform flow conditions at all boundaries
-        // This creates a "wind tunnel" effect where flow passes through freely
-        
-        // Top and bottom boundaries maintain horizontal flow
-        for (let x = 0; x < this.xdim; x++) {
-            this.setEquilibrium(x, 0, this.flowSpeed, 0, 1);          // Top boundary
-            this.setEquilibrium(x, this.ydim-1, this.flowSpeed, 0, 1); // Bottom boundary
-        }
-        
-        // Left (inlet) and right (outlet) boundaries
-        for (let y = 1; y < this.ydim-1; y++) {
-            this.setEquilibrium(0, y, this.flowSpeed, 0, 1);           // Left boundary (inlet)
-            this.setEquilibrium(this.xdim-1, y, this.flowSpeed, 0, 1); // Right boundary (outlet)
         }
     }
 
     updateAngle(newAngle) {
         this.currentAngle = newAngle;
-        // Reinitialize with new angle
         this.initArrays();
         this.initFluid();
         this.addNACABarrier({
@@ -122,11 +103,10 @@ class FluidSimulation {
     initColors() {
         this.nColors = 400;
         this.colors = new Array(this.nColors);
-        
         for (let i = 0; i < this.nColors; i++) {
             const phase = i / this.nColors;
             let r, g, b;
-            
+
             if (phase < 0.125) {
                 r = 0; g = 0;
                 b = Math.round(255 * (phase + 0.125) / 0.25);
@@ -146,7 +126,6 @@ class FluidSimulation {
                 r = Math.round(255 * (1.125 - phase) / 0.25);
                 g = 0; b = 0;
             }
-            
             this.colors[i] = { r, g, b };
         }
     }
@@ -161,19 +140,19 @@ class FluidSimulation {
         const u2 = ux2 + uy2;
         const u215 = 1.5 * u2;
 
-        this.n0[i] = this.four9ths * rho * (1 - u215);
-        this.nE[i] = this.one9th * rho * (1 + ux3 + 4.5*ux2 - u215);
-        this.nW[i] = this.one9th * rho * (1 - ux3 + 4.5*ux2 - u215);
-        this.nN[i] = this.one9th * rho * (1 + uy3 + 4.5*uy2 - u215);
-        this.nS[i] = this.one9th * rho * (1 - uy3 + 4.5*uy2 - u215);
-        this.nNE[i] = this.one36th * rho * (1 + ux3 + uy3 + 4.5*(u2+uxuy2) - u215);
-        this.nSE[i] = this.one36th * rho * (1 + ux3 - uy3 + 4.5*(u2-uxuy2) - u215);
-        this.nNW[i] = this.one36th * rho * (1 - ux3 + uy3 + 4.5*(u2-uxuy2) - u215);
-        this.nSW[i] = this.one36th * rho * (1 - ux3 - uy3 + 4.5*(u2+uxuy2) - u215);
+        this.n0[i]  = this.four9ths * rho * (1 - u215);
+        this.nE[i]  = this.one9th   * rho * (1 + ux3 + 4.5*ux2 - u215);
+        this.nW[i]  = this.one9th   * rho * (1 - ux3 + 4.5*ux2 - u215);
+        this.nN[i]  = this.one9th   * rho * (1 + uy3 + 4.5*uy2 - u215);
+        this.nS[i]  = this.one9th   * rho * (1 - uy3 + 4.5*uy2 - u215);
+        this.nNE[i] = this.one36th  * rho * (1 + ux3 + uy3 + 4.5*(u2+uxuy2) - u215);
+        this.nSE[i] = this.one36th  * rho * (1 + ux3 - uy3 + 4.5*(u2-uxuy2) - u215);
+        this.nNW[i] = this.one36th  * rho * (1 - ux3 + uy3 + 4.5*(u2-uxuy2) - u215);
+        this.nSW[i] = this.one36th  * rho * (1 - ux3 - uy3 + 4.5*(u2+uxuy2) - u215);
 
         this.rho[i] = rho;
-        this.ux[i] = ux;
-        this.uy[i] = uy;
+        this.ux[i]  = ux;
+        this.uy[i]  = uy;
     }
 
     addNACABarrier({ chordFraction = 1/3, thickness = 0.12, angle = 0 }) {
@@ -205,22 +184,108 @@ class FluidSimulation {
 
             this.fillBarrierLine(xTop, yTop, xBot, yBot);
         }
+
+        // Zero out fluid in barrier cells
+        for (let idx = 0; idx < this.barriers.length; idx++) {
+            if (this.barriers[idx] === 1) {
+                this.n0[idx]  = 0;  this.nN[idx]  = 0;  this.nS[idx]  = 0;
+                this.nE[idx]  = 0;  this.nW[idx]  = 0;  this.nNE[idx] = 0;
+                this.nSE[idx] = 0;  this.nNW[idx] = 0;  this.nSW[idx] = 0;
+
+                this.rho[idx] = 0; 
+                this.ux[idx]  = 0;  
+                this.uy[idx]  = 0;
+            }
+        }
     }
 
     fillBarrierLine(x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
         const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
-        
+
         for (let s = 0; s <= steps; s++) {
             const frac = s / steps;
             const x = Math.round(x1 + frac * dx);
             const y = Math.round(y1 + frac * dy);
             const idx = x + y * this.xdim;
-            
             if (idx >= 0 && idx < this.barriers.length) {
-                this.barriers[idx] = true;
+                this.barriers[idx] = 1;
             }
+        }
+    }
+
+    setBoundaryConditions() {
+        const cosA = Math.cos(this.flowAngle);
+        const sinA = Math.sin(this.flowAngle);
+
+        // Inlet on left (if cosA >= 0) or right (if cosA < 0)
+        if (cosA >= 0) {
+            // left boundary
+            for (let y = 0; y < this.ydim; y++) {
+                this.setEquilibrium(0, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
+            }
+            // right boundary "copy"
+            for (let y = 0; y < this.ydim; y++) {
+                const iRight = (this.xdim - 1) + y * this.xdim;
+                const i2 = (this.xdim - 2) + y * this.xdim;
+                this.n0[iRight]  = this.n0[i2];
+                this.nN[iRight]  = this.nN[i2];
+                this.nS[iRight]  = this.nS[i2];
+                this.nE[iRight]  = this.nE[i2];
+                this.nW[iRight]  = this.nW[i2];
+                this.nNE[iRight] = this.nNE[i2];
+                this.nSE[iRight] = this.nSE[i2];
+                this.nNW[iRight] = this.nNW[i2];
+                this.nSW[iRight] = this.nSW[i2];
+            }
+        } else {
+            // right boundary: set velocity
+            for (let y = 0; y < this.ydim; y++) {
+                this.setEquilibrium(this.xdim - 1, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
+            }
+            // left boundary "copy"
+            for (let y = 0; y < this.ydim; y++) {
+                const iLeft = 0 + y * this.xdim;
+                const i2 = 1 + y * this.xdim;
+                this.n0[iLeft]  = this.n0[i2];
+                this.nN[iLeft]  = this.nN[i2];
+                this.nS[iLeft]  = this.nS[i2];
+                this.nE[iLeft]  = this.nE[i2];
+                this.nW[iLeft]  = this.nW[i2];
+                this.nNE[iLeft] = this.nNE[i2];
+                this.nSE[iLeft] = this.nSE[i2];
+                this.nNW[iLeft] = this.nNW[i2];
+                this.nSW[iLeft] = this.nSW[i2];
+            }
+        }
+
+        // Free-slip top/bottom
+        for (let x = 0; x < this.xdim; x++) {
+            const iTop = x + (this.ydim - 1) * this.xdim;
+            const i2   = x + (this.ydim - 2) * this.xdim;
+            this.n0[iTop]  = this.n0[i2];
+            this.nE[iTop]  = this.nE[i2];
+            this.nW[iTop]  = this.nW[i2];
+            this.nN[iTop]  = this.nN[i2];
+            this.nS[iTop]  = this.nS[i2];
+            this.nNE[iTop] = this.nNE[i2];
+            this.nNW[iTop] = this.nNW[i2];
+            this.nSE[iTop] = this.nSE[i2];
+            this.nSW[iTop] = this.nSW[i2];
+        }
+        for (let x = 0; x < this.xdim; x++) {
+            const iBot = x + 0 * this.xdim;
+            const i2   = x + 1 * this.xdim;
+            this.n0[iBot]  = this.n0[i2];
+            this.nE[iBot]  = this.nE[i2];
+            this.nW[iBot]  = this.nW[i2];
+            this.nN[iBot]  = this.nN[i2];
+            this.nS[iBot]  = this.nS[i2];
+            this.nNE[iBot] = this.nNE[i2];
+            this.nNW[iBot] = this.nNW[i2];
+            this.nSE[iBot] = this.nSE[i2];
+            this.nSW[iBot] = this.nSW[i2];
         }
     }
 
@@ -232,68 +297,69 @@ class FluidSimulation {
                 const i = x + y * this.xdim;
                 if (this.barriers[i]) continue;
 
-                const thisrho = this.n0[i] + this.nN[i] + this.nS[i] + this.nE[i] + 
-                               this.nW[i] + this.nNW[i] + this.nNE[i] + this.nSW[i] + this.nSE[i];
-                
-                const thisux = (this.nE[i] + this.nNE[i] + this.nSE[i] - 
-                               this.nW[i] - this.nNW[i] - this.nSW[i]) / thisrho;
-                
-                const thisuy = (this.nN[i] + this.nNE[i] + this.nNW[i] - 
-                               this.nS[i] - this.nSE[i] - this.nSW[i]) / thisrho;
+                const thisrho =
+                    this.n0[i] + this.nN[i] + this.nS[i] + this.nE[i] + this.nW[i] +
+                    this.nNW[i] + this.nNE[i] + this.nSW[i] + this.nSE[i];
 
+                const thisux =
+                    (this.nE[i] + this.nNE[i] + this.nSE[i]) -
+                    (this.nW[i] + this.nNW[i] + this.nSW[i]);
+
+                const thisuy =
+                    (this.nN[i] + this.nNE[i] + this.nNW[i]) -
+                    (this.nS[i] + this.nSE[i] + this.nSW[i]);
+
+                const ux = thisux / thisrho;
+                const uy = thisuy / thisrho;
                 this.rho[i] = thisrho;
-                this.ux[i] = thisux;
-                this.uy[i] = thisuy;
+                this.ux[i]  = ux;
+                this.uy[i]  = uy;
 
-                const one9thrho = this.one9th * thisrho;
+                const one9thrho  = this.one9th  * thisrho;
                 const one36thrho = this.one36th * thisrho;
-                const ux3 = 3 * thisux;
-                const uy3 = 3 * thisuy;
-                const ux2 = thisux * thisux;
-                const uy2 = thisuy * thisuy;
-                const uxuy2 = 2 * thisux * thisuy;
+                const ux3 = 3 * ux;
+                const uy3 = 3 * uy;
+                const ux2 = ux * ux;
+                const uy2 = uy * uy;
+                const uxuy2 = 2 * ux * uy;
                 const u2 = ux2 + uy2;
                 const u215 = 1.5 * u2;
 
-                this.n0[i] += omega * (this.four9ths * thisrho * (1 - u215) - this.n0[i]);
-                this.nE[i] += omega * (one9thrho * (1 + ux3 + 4.5*ux2 - u215) - this.nE[i]);
-                this.nW[i] += omega * (one9thrho * (1 - ux3 + 4.5*ux2 - u215) - this.nW[i]);
-                this.nN[i] += omega * (one9thrho * (1 + uy3 + 4.5*uy2 - u215) - this.nN[i]);
-                this.nS[i] += omega * (one9thrho * (1 - uy3 + 4.5*uy2 - u215) - this.nS[i]);
-                this.nNE[i] += omega * (one36thrho * (1 + ux3 + uy3 + 4.5*(u2+uxuy2) - u215) - this.nNE[i]);
-                this.nSE[i] += omega * (one36thrho * (1 + ux3 - uy3 + 4.5*(u2-uxuy2) - u215) - this.nSE[i]);
-                this.nNW[i] += omega * (one36thrho * (1 - ux3 + uy3 + 4.5*(u2-uxuy2) - u215) - this.nNW[i]);
-                this.nSW[i] += omega * (one36thrho * (1 - ux3 - uy3 + 4.5*(u2+uxuy2) - u215) - this.nSW[i]);
+                this.n0[i]  += omega * (this.four9ths * thisrho * (1 - u215) - this.n0[i]);
+                this.nE[i]  += omega * (one9thrho * (1 + ux3 + 4.5*ux2 - u215) - this.nE[i]);
+                this.nW[i]  += omega * (one9thrho * (1 - ux3 + 4.5*ux2 - u215) - this.nW[i]);
+                this.nN[i]  += omega * (one9thrho * (1 + uy3 + 4.5*uy2 - u215) - this.nN[i]);
+                this.nS[i]  += omega * (one9thrho * (1 - uy3 + 4.5*uy2 - u215) - this.nS[i]);
+                this.nNE[i] += omega * (one36thrho * (1 + ux3 + uy3 + 4.5*(u2 + uxuy2) - u215) - this.nNE[i]);
+                this.nSE[i] += omega * (one36thrho * (1 + ux3 - uy3 + 4.5*(u2 - uxuy2) - u215) - this.nSE[i]);
+                this.nNW[i] += omega * (one36thrho * (1 - ux3 + uy3 + 4.5*(u2 - uxuy2) - u215) - this.nNW[i]);
+                this.nSW[i] += omega * (one36thrho * (1 - ux3 - uy3 + 4.5*(u2 + uxuy2) - u215) - this.nSW[i]);
             }
         }
     }
 
     stream() {
-        // Stream north-moving particles
+        // Stream north-moving
         for (let y = this.ydim - 2; y > 0; y--) {
             for (let x = 1; x < this.xdim - 1; x++) {
-                this.nN[x + y*this.xdim] = this.nN[x + (y-1)*this.xdim];
+                this.nN[x + y*this.xdim]  = this.nN[x + (y-1)*this.xdim];
                 this.nNW[x + y*this.xdim] = this.nNW[x + 1 + (y-1)*this.xdim];
                 this.nNE[x + y*this.xdim] = this.nNE[x - 1 + (y-1)*this.xdim];
             }
         }
-
-        // Stream south-moving particles
+        // Stream south-moving
         for (let y = 0; y < this.ydim - 1; y++) {
             for (let x = 1; x < this.xdim - 1; x++) {
-                this.nS[x + y*this.xdim] = this.nS[x + (y+1)*this.xdim];
+                this.nS[x + y*this.xdim]  = this.nS[x + (y+1)*this.xdim];
                 this.nSW[x + y*this.xdim] = this.nSW[x + 1 + (y+1)*this.xdim];
                 this.nSE[x + y*this.xdim] = this.nSE[x - 1 + (y+1)*this.xdim];
             }
         }
-
-        // Handle bounce-back from barriers
+        // Bounce-back from barriers
         for (let y = 1; y < this.ydim - 1; y++) {
             for (let x = 1; x < this.xdim - 1; x++) {
                 if (this.barriers[x + y*this.xdim]) {
                     const i = x + y*this.xdim;
-                    
-                    // Swap pairs of opposite directions
                     [this.nE[x+1 + y*this.xdim], this.nW[i]] = [this.nW[i], this.nE[i]];
                     [this.nN[x + (y+1)*this.xdim], this.nS[i]] = [this.nS[i], this.nN[i]];
                     [this.nNE[x+1 + (y+1)*this.xdim], this.nSW[i]] = [this.nSW[i], this.nNE[i]];
@@ -303,55 +369,48 @@ class FluidSimulation {
         }
     }
 
-    computeCurl() {
-        for (let y = 1; y < this.ydim - 1; y++) {
-            for (let x = 1; x < this.xdim - 1; x++) {
+    /**
+     * computeSpeed: fill this.speed[] with sqrt(ux^2 + uy^2).
+     */
+    computeSpeed() {
+        for (let y = 0; y < this.ydim; y++) {
+            for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
-                this.curl[i] = 
-                    (this.uy[x + 1 + y * this.xdim] - this.uy[x - 1 + y * this.xdim]) -
-                    (this.ux[x + (y + 1) * this.xdim] - this.ux[x + (y - 1) * this.xdim]);
+                const vx = this.ux[i];
+                const vy = this.uy[i];
+                this.speed[i] = Math.sqrt(vx*vx + vy*vy);
             }
         }
     }
 
+    /**
+     * draw: color by velocity magnitude instead of curl
+     */
     draw() {
-        // Apply boundary conditions
-        const cosA = Math.cos(this.flowAngle);
-        const sinA = Math.sin(this.flowAngle);
+        this.computeSpeed(); // or could do on the fly
 
-        // Set inlet conditions based on flow direction
-        if (cosA > 0) {
-            for (let y = 0; y < this.ydim; y++) {
-                this.setEquilibrium(0, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
-            }
-        } else {
-            for (let y = 0; y < this.ydim; y++) {
-                this.setEquilibrium(this.xdim - 1, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
-            }
-        }
+        // scale factor for speed -> color index
+        const scale = 2000; // adjust as needed
 
-        this.computeCurl();
-
-        // Draw the fluid
-        const contrast = 15;
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
                 
                 if (this.barriers[i]) {
-                    this.fillSquare(x, y, 255, 255, 255); // White for barriers
+                    // barrier in white
+                    this.fillSquare(x, y, 255, 255, 255);
                     continue;
                 }
 
-                // Color based on curl
-                let colorIndex = Math.floor((this.curl[i] * contrast + 0.5) * (this.nColors / 2));
+                const spd = this.speed[i];
+                let colorIndex = Math.floor(spd * scale);
+                // clamp to [0, nColors-1]
                 colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
 
                 const c = this.colors[colorIndex];
                 this.fillSquare(x, y, c.r, c.g, c.b);
             }
         }
-
         this.ctx.putImageData(this.imageData, 0, 0);
     }
 
@@ -360,10 +419,10 @@ class FluidSimulation {
         for (let py = flippedY * this.pxPerSquare; py < (flippedY + 1) * this.pxPerSquare; py++) {
             for (let px = x * this.pxPerSquare; px < (x + 1) * this.pxPerSquare; px++) {
                 const idx = (px + py * this.width) * 4;
-                this.imageData.data[idx] = r;
-                this.imageData.data[idx + 1] = g;
-                this.imageData.data[idx + 2] = b;
-                this.imageData.data[idx + 3] = 255;
+                this.imageData.data[idx]   = r;
+                this.imageData.data[idx+1] = g;
+                this.imageData.data[idx+2] = b;
+                this.imageData.data[idx+3] = 255;
             }
         }
     }
@@ -371,7 +430,6 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        // Perform multiple simulation steps per frame
         const stepsPerFrame = 10;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
@@ -384,26 +442,22 @@ class FluidSimulation {
     }
 
     resize(width, height) {
-        // Update canvas dimensions
         this.canvas.width = Math.max(width, 600);
         this.canvas.height = Math.max(height, 400);
         this.width = this.canvas.width;
         this.height = this.canvas.height;
 
-        // Update dimensions while preserving simulation state
         this.xdim = Math.floor(this.width / this.pxPerSquare);
         this.ydim = Math.floor(this.height / this.pxPerSquare);
         if (this.xdim < 50) this.xdim = 50;
         if (this.ydim < 50) this.ydim = 50;
 
-        // Reinitialize size-dependent arrays
         this.initArrays();
         this.imageData = this.ctx.createImageData(this.width, this.height);
         for (let i = 3; i < this.imageData.data.length; i += 4) {
             this.imageData.data[i] = 255;
         }
 
-        // Reinitialize fluid state
         this.initFluid();
         this.addNACABarrier({
             chordFraction: 1/3.5,
@@ -411,10 +465,8 @@ class FluidSimulation {
             angle: 6.17
         });
 
-        // Just redraw, don't restart animation loop
         this.draw();
     }
-
 }
 
 // Initialize with improved event handling
@@ -446,9 +498,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <strong>Airfoil Angle</strong>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
-            <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↓</button>
+            <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
             <div id="angleDisplay" style="font-family: monospace; min-width: 80px; text-align: center;"></div>
-            <button id="increaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
+            <button id="increaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↓</button>
         </div>
     `;
     
@@ -461,10 +513,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 3,
+        pxPerSquare: 2,
         flowSpeed: 0.2,
         flowAngleDeg: 0,
-        viscosity: .1
+        viscosity: .3
     });
 
     // Set up angle control handlers
