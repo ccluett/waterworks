@@ -95,14 +95,33 @@ section p {
     height: 100vh;
 }
 
-.home-text {
+/* .home-text {
     flex: 1;
     padding: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
+} */
+
+.home-text {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
+.home-badge {
+  margin-bottom: 5px;
+}
+
+.home-badge img {
+  width: 300px;
+  height: auto;
+  /* border-radius: 50%; */
+}
 .home-text h1 {
     font-size: 2em;
     line-height: 1.4;
@@ -252,8 +271,12 @@ footer {
     .about-image {
       width: 90%; /* Similar to project-logo mobile treatment */
       max-width: 1200px;
-  }
-
+    }
+  
+  .home-badge img {
+    width: 40vw;
+    }
+    
     #projects .project-container {
         flex-direction: column;
       }
