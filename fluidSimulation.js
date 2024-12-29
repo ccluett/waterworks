@@ -7,7 +7,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = 0; 
+        this.currentAngle = -0.20944; 
 
         // Dimensions
         this.width = canvas.width;
@@ -479,49 +479,50 @@ class FluidSimulation {
         this.ctx.putImageData(this.imageData, 0, 0);
     
         // Now draw the horizontal legend at the bottom left
-        this.drawLegend(scale);
+        // this.drawLegend(scale);
     }
         
-    drawLegend(scale) {
-        const ctx = this.ctx;
+    // drawLegend(scale) {
+    //     const ctx = this.ctx;
     
-        // Legend dimensions
-        const barWidth = 200;
-        const barHeight = 20;
+    //     // Legend dimensions
+    //     const barWidth = 200;
+    //     const barHeight = 20;
     
-        // Position
-        const xOffset = 10;
-        const yOffset = this.height - barHeight - 10; // 10 px padding from bottom
+    //     // Position
+    //     const xOffset = 10;
+    //     const yOffset = this.height - barHeight - 10; // 10 px padding from bottom
     
-        for (let col = 0; col < barWidth; col++) {
-            // fraction from 0..1
-            const frac = col / barWidth;
-            // pick color index
-            const colorIndex = Math.floor(frac * (this.nColors - 1));
-            const c = this.colors[colorIndex];
+    //     for (let col = 0; col < barWidth; col++) {
+    //         // fraction from 0..1
+    //         const frac = col / barWidth;
+    //         // pick color index
+    //         const colorIndex = Math.floor(frac * (this.nColors - 1));
+    //         const c = this.colors[colorIndex];
     
-            // set fillStyle
-            ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
-            // draw a thin vertical strip
-            ctx.fillRect(xOffset + col, yOffset, 1, barHeight);
-        }
+    //         // set fillStyle
+    //         ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
+    //         // draw a thin vertical strip
+    //         ctx.fillRect(xOffset + col, yOffset, 1, barHeight);
+    //     }
     
-        // // Draw an outline around the color bar
-        // ctx.strokeStyle = 'white';
-        // ctx.lineWidth = 1;
-        // ctx.strokeRect(xOffset, yOffset, barWidth, barHeight);
+    //     // // Draw an outline around the color bar
+    //     // ctx.strokeStyle = 'white';
+    //     // ctx.lineWidth = 1;
+    //     // ctx.strokeRect(xOffset, yOffset, barWidth, barHeight);
     
-        // Label the min and max speeds
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Arial';
+    //     // Label the min and max speeds
+    //     ctx.fillStyle = 'white';
+    //     ctx.font = '12px Arial';
     
-        // Min speed label
-        ctx.fillText('0', xOffset, yOffset - 2); // a little above the bar
-        // Max speed label
-        const maxSpeed = ((this.nColors - 1) / scale).toFixed(2);
-        const textWidth = ctx.measureText(maxSpeed).width;
-        ctx.fillText(maxSpeed, xOffset + barWidth - textWidth, yOffset - 2);
-    }
+    //     // Min speed label
+    //     ctx.fillText('0', xOffset, yOffset - 2); // a little above the bar
+        
+    //     // Max speed label
+    //     const maxSpeed = ((this.nColors - 1 ) / scale).toFixed(1);
+    //     const textWidth = ctx.measureText(maxSpeed).width;
+    //     ctx.fillText(maxSpeed, xOffset + barWidth - textWidth, yOffset - 2);
+    // }
     
     
     fillSquare(x, y, r, g, b) {
@@ -540,7 +541,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 5;
+        const stepsPerFrame = 8;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -623,10 +624,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 1,
-        flowSpeed: 0.1,
+        pxPerSquare: 2,
+        flowSpeed: 0.2,
         flowAngleDeg: 0,
-        viscosity: .2
+        viscosity: .3
     });
 
     // Set up angle control handlers
