@@ -7,7 +7,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = -0.244346; 
+        this.currentAngle = -0.314159; 
 
         // Dimensions
         this.width = canvas.width;
@@ -503,7 +503,7 @@ class FluidSimulation {
     draw() {
         this.computeSpeed();
     
-        const scale = 900;  // same as your velocity->color indexing
+        const scale = 1200;  // same as your velocity->color indexing
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -547,7 +547,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 5;
+        const stepsPerFrame = 20;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
