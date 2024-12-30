@@ -1,5 +1,4 @@
 // fluidSimulation.js  //
-    /* LBM with airfoil */
 
 class FluidSimulation {
     constructor(canvas, options = {}) {
@@ -525,7 +524,7 @@ class FluidSimulation {
         // Put the simulation pixels onto the canvas
         this.ctx.putImageData(this.imageData, 0, 0);
     
-        // Now draw the horizontal legend at the bottom left
+        // Add horizontal legend at the bottom left
         // this.drawLegend(scale);
     }
         
@@ -608,9 +607,14 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.backgroundColor = 'rgba(105, 193, 255, 0.9)';
     controlsDiv.style.padding = '10px';
     controlsDiv.style.borderRadius = '5px';
-    controlsDiv.style.zIndex = '1000';  // Ensure controls are above the canvas
+    controlsDiv.style.zIndex = '1000'; 
     controlsDiv.style.cursor = 'default';
-    controlsDiv.innerHTML = `
+    controlsDiv.innerHTML = `        
+        <div style="text-align: center; margin-bottom: 10px;">
+            <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
+                Pause
+            </button>
+        </div>
         <div style="text-align: center; margin-bottom: 10px;">
             <strong>Angle of Attack</strong>
         </div>
@@ -637,7 +641,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Set up angle control handlers
-    const stepSize = 0.0349066; // About 2 degrees
+    const stepSize = 0.0349066; // 2 degrees
     const angleDisplay = document.getElementById('angleDisplay');
     const updateAngleDisplay = () => {
         const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
@@ -649,11 +653,31 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('increaseAngle').addEventListener('click', () => {
         simulation.updateAngle(simulation.currentAngle + stepSize);
         updateAngleDisplay();
+        if (!simulation.running) {
+            simulation.running = true;
+            simulation.update();
+            document.getElementById('playPauseButton').textContent = 'Pause';
+        }
     });
-
+    
     document.getElementById('decreaseAngle').addEventListener('click', () => {
         simulation.updateAngle(simulation.currentAngle - stepSize);
         updateAngleDisplay();
+        if (!simulation.running) {
+            simulation.running = true;
+            simulation.update();
+            document.getElementById('playPauseButton').textContent = 'Pause';
+        }
+    });
+
+    // Play/pause event listener
+    document.getElementById('playPauseButton').addEventListener('click', () => {
+        simulation.running = !simulation.running;
+        const button = document.getElementById('playPauseButton');
+        button.textContent = simulation.running ? 'Pause' : 'Play';
+        if (simulation.running) {
+            simulation.update();
+        }
     });
 
     // Debounced resize handler
