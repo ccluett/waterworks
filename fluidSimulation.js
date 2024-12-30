@@ -26,7 +26,7 @@ class FluidSimulation {
         this.flowSpeed = options.flowSpeed || 0.2;
         this.flowAngle = (options.flowAngleDeg || 0) * Math.PI / 180;
         this.viscosity = options.viscosity || 0.01;
-        this.running = true;
+        this.running = false;
 
         // Arrays
         this.initArrays();
@@ -53,7 +53,10 @@ class FluidSimulation {
         });
 
         // 3) Start simulation
-        this.update();
+        this.draw();  // Draw the initial state regardless of running
+        if (this.running) {
+            this.update();
+        }
     }
 
     initArrays() {
@@ -546,7 +549,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 20;
+        const stepsPerFrame = 5;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -612,7 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.innerHTML = `        
         <div style="text-align: center; margin-bottom: 10px;">
             <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
-                Pause
+                Play
             </button>
         </div>
         <div style="text-align: center; margin-bottom: 10px;">
@@ -634,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 1,
+        pxPerSquare: 2,
         flowSpeed: 0.2,
         flowAngleDeg: 0,
         viscosity: .3
