@@ -7,7 +7,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = -0.20944; 
+        this.currentAngle = -0.244346; 
 
         // Dimensions
         this.width = canvas.width;
@@ -71,6 +71,7 @@ class FluidSimulation {
         this.rho = new Float32Array(size);
         this.ux  = new Float32Array(size);
         this.uy  = new Float32Array(size);
+        this.curl = new Float32Array(size);  
 
         this.speed = new Float32Array(size);
 
@@ -78,12 +79,24 @@ class FluidSimulation {
     }
 
     initFluid() {
-        // Set the entire domain to rest (u=0) with rho=1
+        // Initialize entire domain to match inlet velocity and density
+        const ux0 = this.flowSpeed * Math.cos(this.flowAngle);
+        const uy0 = this.flowSpeed * Math.sin(this.flowAngle);
+        const rho0 = 1.0;  // reference density
+    
+        // Set the entire domain to the inlet conditions
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
-                this.setEquilibrium(x, y, 0, 0, 1);
+                this.setEquilibrium(x, y, ux0, uy0, rho0);
             }
         }
+    
+        for (let i = 0; i < this.curl.length; i++) {
+            this.curl[i] = 0.0;
+        }
+
+        // Zero out any velocities in barrier cells
+        this._zeroOutBarrierCells();
     }
 
     updateAngle(newAngle) {
@@ -126,6 +139,11 @@ class FluidSimulation {
             }
             this.colors[i] = { r, g, b };
         }
+    }
+
+    computeDensity(i) {
+        return this.n0[i] + this.nN[i] + this.nS[i] + this.nE[i] + this.nW[i] + 
+               this.nNW[i] + this.nNE[i] + this.nSW[i] + this.nSE[i];
     }
 
     setEquilibrium(x, y, ux, uy, rho) {
@@ -291,49 +309,33 @@ class FluidSimulation {
     setBoundaryConditions() {
         const cosA = Math.cos(this.flowAngle);
         const sinA = Math.sin(this.flowAngle);
-
-        // Inlet on left (if cosA >= 0) or right (if cosA < 0)
+    
+        // Handle both inlet and outlet with consistent velocity
         if (cosA >= 0) {
-            // left boundary
+            // Left to right flow
             for (let y = 0; y < this.ydim; y++) {
+                // Left boundary (inlet) - fixed density
                 this.setEquilibrium(0, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
-            }
-            // right boundary "copy"
-            for (let y = 0; y < this.ydim; y++) {
-                const iRight = (this.xdim - 1) + y * this.xdim;
+                
+                // Right boundary (outlet) - maintain velocity but let density adjust
                 const i2 = (this.xdim - 2) + y * this.xdim;
-                this.n0[iRight]  = this.n0[i2];
-                this.nN[iRight]  = this.nN[i2];
-                this.nS[iRight]  = this.nS[i2];
-                this.nE[iRight]  = this.nE[i2];
-                this.nW[iRight]  = this.nW[i2];
-                this.nNE[iRight] = this.nNE[i2];
-                this.nSE[iRight] = this.nSE[i2];
-                this.nNW[iRight] = this.nNW[i2];
-                this.nSW[iRight] = this.nSW[i2];
+                const rhoOut = this.computeDensity(i2);
+                this.setEquilibrium(this.xdim - 1, y, this.flowSpeed * cosA, this.flowSpeed * sinA, rhoOut);
             }
         } else {
-            // right boundary: set velocity
+            // Right to left flow
             for (let y = 0; y < this.ydim; y++) {
+                // Right boundary (inlet) - fixed density
                 this.setEquilibrium(this.xdim - 1, y, this.flowSpeed * cosA, this.flowSpeed * sinA, 1);
-            }
-            // left boundary "copy"
-            for (let y = 0; y < this.ydim; y++) {
-                const iLeft = 0 + y * this.xdim;
+                
+                // Left boundary (outlet) - maintain velocity but let density adjust
                 const i2 = 1 + y * this.xdim;
-                this.n0[iLeft]  = this.n0[i2];
-                this.nN[iLeft]  = this.nN[i2];
-                this.nS[iLeft]  = this.nS[i2];
-                this.nE[iLeft]  = this.nE[i2];
-                this.nW[iLeft]  = this.nW[i2];
-                this.nNE[iLeft] = this.nNE[i2];
-                this.nSE[iLeft] = this.nSE[i2];
-                this.nNW[iLeft] = this.nNW[i2];
-                this.nSW[iLeft] = this.nSW[i2];
+                const rhoOut = this.computeDensity(i2);
+                this.setEquilibrium(0, y, this.flowSpeed * cosA, this.flowSpeed * sinA, rhoOut);
             }
         }
-
-        // Free-slip top/bottom
+    
+        // Free-slip top/bottom boundaries
         for (let x = 0; x < this.xdim; x++) {
             const iTop = x + (this.ydim - 1) * this.xdim;
             const i2   = x + (this.ydim - 2) * this.xdim;
@@ -453,10 +455,55 @@ class FluidSimulation {
         }
     }
 
+    computeCurl() {
+        // Compute curl (vorticity) as ∂uy/∂x - ∂ux/∂y using central differences
+        for (let y = 1; y < this.ydim - 1; y++) {
+            for (let x = 1; x < this.xdim - 1; x++) {
+                const i = x + y * this.xdim;
+                
+                // Central difference for ∂uy/∂x
+                const duy_dx = (this.uy[x + 1 + y * this.xdim] - this.uy[x - 1 + y * this.xdim]) / 2.0;
+                
+                // Central difference for ∂ux/∂y
+                const dux_dy = (this.ux[x + (y + 1) * this.xdim] - this.ux[x + (y - 1) * this.xdim]) / 2.0;
+                
+                this.curl[i] = duy_dx - dux_dy;
+            }
+        }
+    }
+
+    // draw() {
+    //     // Compute curl before drawing
+    //     this.computeCurl();
+    
+    //     const scale = 100.0;  // Adjust this to change curl color sensitivity
+    //     for (let y = 0; y < this.ydim; y++) {
+    //         for (let x = 0; x < this.xdim; x++) {
+    //             const i = x + y * this.xdim;
+                
+    //             if (this.barriers[i]) {
+    //                 // barrier in white
+    //                 this.fillSquare(x, y, 255, 255, 255);
+    //                 continue;
+    //             }
+    
+    //             // Map curl to color index
+    //             let colorIndex = Math.floor((this.curl[i] * scale + 0.5) * this.nColors);
+    //             colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
+    
+    //             const c = this.colors[colorIndex];
+    //             this.fillSquare(x, y, c.r, c.g, c.b);
+    //         }
+    //     }
+    //     // Put the simulation pixels onto the canvas
+    //     this.ctx.putImageData(this.imageData, 0, 0);
+    // }
+
+
     draw() {
         this.computeSpeed();
     
-        const scale = 1100;  // same as your velocity->color indexing
+        const scale = 900;  // same as your velocity->color indexing
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -482,47 +529,6 @@ class FluidSimulation {
         // this.drawLegend(scale);
     }
         
-    // drawLegend(scale) {
-    //     const ctx = this.ctx;
-    
-    //     // Legend dimensions
-    //     const barWidth = 200;
-    //     const barHeight = 20;
-    
-    //     // Position
-    //     const xOffset = 10;
-    //     const yOffset = this.height - barHeight - 10; // 10 px padding from bottom
-    
-    //     for (let col = 0; col < barWidth; col++) {
-    //         // fraction from 0..1
-    //         const frac = col / barWidth;
-    //         // pick color index
-    //         const colorIndex = Math.floor(frac * (this.nColors - 1));
-    //         const c = this.colors[colorIndex];
-    
-    //         // set fillStyle
-    //         ctx.fillStyle = `rgb(${c.r}, ${c.g}, ${c.b})`;
-    //         // draw a thin vertical strip
-    //         ctx.fillRect(xOffset + col, yOffset, 1, barHeight);
-    //     }
-    
-    //     // // Draw an outline around the color bar
-    //     // ctx.strokeStyle = 'white';
-    //     // ctx.lineWidth = 1;
-    //     // ctx.strokeRect(xOffset, yOffset, barWidth, barHeight);
-    
-    //     // Label the min and max speeds
-    //     ctx.fillStyle = 'white';
-    //     ctx.font = '12px Arial';
-    
-    //     // Min speed label
-    //     ctx.fillText('0', xOffset, yOffset - 2); // a little above the bar
-        
-    //     // Max speed label
-    //     const maxSpeed = ((this.nColors - 1 ) / scale).toFixed(1);
-    //     const textWidth = ctx.measureText(maxSpeed).width;
-    //     ctx.fillText(maxSpeed, xOffset + barWidth - textWidth, yOffset - 2);
-    // }
     
     
     fillSquare(x, y, r, g, b) {
@@ -541,7 +547,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 10;
+        const stepsPerFrame = 5;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -625,7 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
         pxPerSquare: 1,
-        flowSpeed: 0.5,
+        flowSpeed: 0.2,
         flowAngleDeg: 0,
         viscosity: .3
     });
