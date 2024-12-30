@@ -456,7 +456,7 @@ class FluidSimulation {
     draw() {
         this.computeSpeed();
     
-        const scale = 2000;  // same as your velocity->color indexing
+        const scale = 1500;  // same as your velocity->color indexing
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -541,7 +541,7 @@ class FluidSimulation {
     update() {
         if (!this.running) return;
 
-        const stepsPerFrame = 8;
+        const stepsPerFrame = 10;
         for (let step = 0; step < stepsPerFrame; step++) {
             this.setBoundaryConditions();
             this.collide();
@@ -624,10 +624,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,
-        flowSpeed: 0.2,
+        pxPerSquare: 1,
+        flowSpeed: 0.3,
         flowAngleDeg: 0,
-        viscosity: .3
+        viscosity: .05
     });
 
     // Set up angle control handlers
