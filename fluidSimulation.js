@@ -648,9 +648,11 @@ document.addEventListener('DOMContentLoaded', () => {
         entries.forEach(entry => {
             const controls = document.querySelector('.simulation-controls');
             if (entry.isIntersecting) {
-                controls.style.display = 'block';
+                controls.style.opacity = '1';
+                controls.style.visibility = 'visible';
             } else {
-                controls.style.display = 'none';
+                controls.style.opacity = '0';
+                controls.style.visibility = 'hidden';
             }
         });
     }, { threshold: 0.1 });

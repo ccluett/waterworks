@@ -293,7 +293,9 @@ footer {
       bottom: 10px !important;
       right: 50% !important;
       transform: translateX(50%) !important;
-      display: none;
+      transition: opacity 0.3s ease;
+      opacity: 0;
+      visibility: hidden;
   }
 
     /* .simulation-canvas.initialized ~ .simulation-controls {
