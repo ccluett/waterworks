@@ -597,6 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const canvas = document.createElement('canvas');
+    canvas.className = 'simulation-canvas';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.backgroundColor = 'black';
@@ -640,6 +641,21 @@ document.addEventListener('DOMContentLoaded', () => {
         flowAngleDeg: 0,
         viscosity: .3
     });
+    
+    canvas.classList.add('initialized');
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const controls = document.querySelector('.simulation-controls');
+            if (entry.isIntersecting) {
+                controls.style.display = 'block';
+            } else {
+                controls.style.display = 'none';
+            }
+        });
+    }, { threshold: 0.1 });
+    
+    observer.observe(canvas);
 
     // Set up angle control handlers
     const stepSize = 0.0349066; // 2 degrees
