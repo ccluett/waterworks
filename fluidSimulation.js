@@ -604,6 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Create controls container
     const controlsDiv = document.createElement('div');
+    controlsDiv.className = 'simulation-controls'; // Add this line
     controlsDiv.style.position = 'absolute';
     controlsDiv.style.bottom = '20px';
     controlsDiv.style.right = '20px';
