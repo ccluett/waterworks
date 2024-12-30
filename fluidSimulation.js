@@ -612,14 +612,11 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.borderRadius = '5px';
     controlsDiv.style.zIndex = '1000'; 
     controlsDiv.style.cursor = 'default';
-    controlsDiv.innerHTML = `        
+    controlsDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 10px;">
-            <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px;">
-                Play
+            <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 0px;">
+                Simulate
             </button>
-        </div>
-        <div style="text-align: center; margin-bottom: 10px;">
-            <strong>Angle of Attack</strong>
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
             <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
@@ -649,7 +646,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateAngleDisplay = () => {
         const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
         const radians = simulation.currentAngle.toFixed(2);
-        angleDisplay.innerHTML = `${radians*-1} rad<br>${degrees*-1}°`;
+        //angleDisplay.innerHTML = `${radians*-1} rad<br>${degrees*-1}°`;
+        angleDisplay.innerHTML = `Adjust AoA<br>${degrees*-1}°`;
     };
     updateAngleDisplay();
 
@@ -677,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('playPauseButton').addEventListener('click', () => {
         simulation.running = !simulation.running;
         const button = document.getElementById('playPauseButton');
-        button.textContent = simulation.running ? 'Pause' : 'Play';
+        button.textContent = simulation.running ? 'Pause' : 'Simulate';
         if (simulation.running) {
             simulation.update();
         }
