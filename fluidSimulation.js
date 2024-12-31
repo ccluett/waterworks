@@ -6,7 +6,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = -0.314159; 
+        this.currentAngle = -0.418879; 
 
         // Dimensions
         this.width = canvas.width;
@@ -548,16 +548,23 @@ class FluidSimulation {
 
     update() {
         if (!this.running) return;
-
-        const stepsPerFrame = 5;
-        for (let step = 0; step < stepsPerFrame; step++) {
-            this.setBoundaryConditions();
-            this.collide();
-            this.stream();
+    
+        try {
+            const stepsPerFrame = 5;
+            for (let step = 0; step < stepsPerFrame; step++) {
+                this.setBoundaryConditions();
+                this.collide();
+                this.stream();
+            }
+    
+            this.draw();
+            requestAnimationFrame(() => this.update());
+        } catch (error) {
+            this.running = false;
+            const statusMsg = document.getElementById('statusMessage');
+            statusMsg.textContent = `Error: ${error.message}`;
+            console.error('Simulation error:', error);
         }
-
-        this.draw();
-        requestAnimationFrame(() => this.update());
     }
 
     resize(width, height) {
@@ -625,6 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="angleDisplay" style="font-family: monospace; min-width: 80px; text-align: center;"></div>
             <button id="increaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↓</button>
         </div>
+        <div id="statusMessage" style="text-align: center; margin-top: 10px; font-family: monospace;"></div>
     `;
     
     container.appendChild(canvas);
@@ -657,6 +665,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { threshold: 0.1 });
     
+    document.getElementById('statusMessage').textContent = 'Status: Paused';
+
     observer.observe(canvas);
 
     // Set up angle control handlers
@@ -677,6 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
             simulation.running = true;
             simulation.update();
             document.getElementById('playPauseButton').textContent = 'Pause';
+            document.getElementById('statusMessage').textContent = 'Status: Solving LBM';
         }
     });
     
@@ -687,6 +698,7 @@ document.addEventListener('DOMContentLoaded', () => {
             simulation.running = true;
             simulation.update();
             document.getElementById('playPauseButton').textContent = 'Pause';
+            document.getElementById('statusMessage').textContent = 'Status: Solving LBM';
         }
     });
 
@@ -694,7 +706,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('playPauseButton').addEventListener('click', () => {
         simulation.running = !simulation.running;
         const button = document.getElementById('playPauseButton');
+        const statusMsg = document.getElementById('statusMessage');
         button.textContent = simulation.running ? 'Pause' : 'Simulate';
+        statusMsg.textContent = simulation.running ? 'Status: Solving LBM' : 'Status: Paused';
         if (simulation.running) {
             simulation.update();
         }
