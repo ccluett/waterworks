@@ -145,7 +145,7 @@ section p {
   align-items: center; 
 }
 
-fluid-controls {
+/* .simulation-controls {
   position: absolute;
   bottom: 20px;
   right: 20px;
@@ -154,7 +154,7 @@ fluid-controls {
   border-radius: 5px;
   z-index: 1000;
   cursor: default;
-}
+} */
 
 /* .home-image {
   position: relative;

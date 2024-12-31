@@ -621,18 +621,19 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.borderRadius = '5px';
     controlsDiv.style.zIndex = '1000'; 
     controlsDiv.style.cursor = 'default';
+    controlsDiv.style.width = '200px';
     controlsDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 10px;">
             <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 0px;">
                 Simulate
             </button>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
-            <div id="angleDisplay" style="font-family: monospace; min-width: 80px; text-align: center;"></div>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;">
             <button id="increaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↓</button>
-        </div>
-        <div id="statusMessage" style="text-align: center; margin-top: 10px; font-family: monospace;"></div>
+            <div id="angleDisplay" style="font-family: monospace; min-width: 80px; text-align: center;"></div>
+            <button id="decreaseAngle" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white;">↑</button>
+            </div>
+        <div id="statusMessage" style="text-align: left; margin-top: 10px; font-family: monospace;"></div>
     `;
     
     container.appendChild(canvas);
@@ -644,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 2,
+        pxPerSquare: 1,
         flowSpeed: 0.2,
         flowAngleDeg: 0,
         viscosity: .3
@@ -665,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { threshold: 0.1 });
     
-    document.getElementById('statusMessage').textContent = 'Status: Paused';
+    document.getElementById('statusMessage').textContent = 'Status: Domain Initalized';
 
     observer.observe(canvas);
 
