@@ -6,7 +6,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = -0.418879; 
+        this.currentAngle = -0.436332; 
 
         // Dimensions
         this.width = canvas.width;
@@ -645,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Create simulation with improved parameters
     const simulation = new FluidSimulation(canvas, {
-        pxPerSquare: 1,
+        pxPerSquare: 2,
         flowSpeed: 0.2,
         flowAngleDeg: 0,
         viscosity: .3
@@ -671,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
     observer.observe(canvas);
 
     // Set up angle control handlers
-    const stepSize = 0.0349066; // 2 degrees
+    const stepSize = 0.0872665; // 5 degrees
     const angleDisplay = document.getElementById('angleDisplay');
     const updateAngleDisplay = () => {
         const degrees = (simulation.currentAngle * 180 / Math.PI).toFixed(1);
