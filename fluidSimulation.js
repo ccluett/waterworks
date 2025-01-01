@@ -624,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.width = '200px';
     controlsDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 10px;">
-            <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 0px;">
+            <button id="playPauseButton" style="padding: 8px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 0px; font-family: monospace;">
                 Simulate
             </button>
         </div>
