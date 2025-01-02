@@ -192,6 +192,7 @@ section p {
 #about { 
     background-color: black; 
     color: white;
+    text-align: left;
 }
 
 .about-image {
