@@ -688,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
             simulation.running = true;
             simulation.update();
             document.getElementById('playPauseButton').textContent = 'Pause';
-            document.getElementById('statusMessage').textContent = 'Status: Solving LBM';
+            document.getElementById('statusMessage').textContent = 'Status: Solving LBM Model';
         }
     });
     
@@ -699,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
             simulation.running = true;
             simulation.update();
             document.getElementById('playPauseButton').textContent = 'Pause';
-            document.getElementById('statusMessage').textContent = 'Status: Solving LBM';
+            document.getElementById('statusMessage').textContent = 'Status: Solving LBM Model';
         }
     });
 
@@ -709,7 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = document.getElementById('playPauseButton');
         const statusMsg = document.getElementById('statusMessage');
         button.textContent = simulation.running ? 'Pause' : 'Simulate';
-        statusMsg.textContent = simulation.running ? 'Status: Solving LBM' : 'Status: Paused';
+        statusMsg.textContent = simulation.running ? 'Status: Solving LBM Model' : 'Status: Paused';
         if (simulation.running) {
             simulation.update();
         }
