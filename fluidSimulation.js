@@ -595,7 +595,7 @@ class FluidSimulation {
     }
 }
 
-// Initialize with improved event handling
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.querySelector('.home-image');
     if (!container) {
@@ -616,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
     controlsDiv.style.position = 'absolute';
     controlsDiv.style.bottom = '20px';
     controlsDiv.style.right = '20px';
-    controlsDiv.style.backgroundColor = 'rgba(105, 193, 255, 0.9)';
+    controlsDiv.style.backgroundColor = 'rgba(24, 27, 29, 0.5)';
     controlsDiv.style.padding = '10px';
     controlsDiv.style.borderRadius = '5px';
     controlsDiv.style.zIndex = '1000'; 
@@ -643,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.width = Math.max(Math.floor(rect.width), 600);
     canvas.height = Math.max(Math.floor(rect.height), 400);
 
-    // Create simulation with improved parameters
+    // Create simulation
     const simulation = new FluidSimulation(canvas, {
         pxPerSquare: 2,
         flowSpeed: 0.2,
