@@ -385,6 +385,7 @@ footer {
     .home-content {
         flex-direction: column;
         height: auto;
+        padding: 30px;
     }
 
     .home-text {
