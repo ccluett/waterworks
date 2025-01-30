@@ -139,6 +139,9 @@ function processSeasons(rawData) {
         };
     });
 
+    // Sort seasons chronologically
+    seasonsData.sort((a, b) => a.name.localeCompare(b.name));
+
     // Calculate averages (excluding current season)
     const validSeasons = seasonsData.filter(s => !s.isCurrent);
     averageData = {
@@ -239,37 +242,29 @@ function updateHighlightedSeason(seasonName) {
     // Update both charts
     ['depthChart', 'cumulativeChart'].forEach(chartId => {
         const isDepth = chartId === 'depthChart';
-        const chart = document.getElementById(chartId);
-        const existingTraces = chart.data;
         
-        // Find if there's already a highlighted trace
-        const highlightedIndex = existingTraces.findIndex(trace => 
-            trace.name !== 'Average' && trace.showlegend);
-        
-        const newTrace = {
-            x: [...Array(365).keys()],
-            y: isDepth ? season.depths : season.cumulative,
-            name: season.name,  // Use the season name instead of 'Highlighted'
-            line: { color: '#0066cc', width: 2 }
-        };
-
-        if (highlightedIndex >= 0) {
-            // Update existing highlighted trace
-            Plotly.deleteTraces(chartId, highlightedIndex);
-            Plotly.addTraces(chartId, newTrace);
-        } else {
-            // Add new highlighted trace
-            Plotly.addTraces(chartId, newTrace);
-        }
-
-        // Update the layout to ensure proper legend order
-        const updatedLayout = {
-            showlegend: true,
-            legend: {
-                traceorder: 'reversed'
+        // Recreate the chart with just the average and the selected season
+        Plotly.newPlot(chartId, [
+            // Average trace
+            {
+                x: [...Array(365).keys()],
+                y: isDepth ? averageData.depths : averageData.cumulative,
+                name: 'Average',
+                line: { color: '#000', width: 2 }
+            },
+            // Selected season trace
+            {
+                x: [...Array(365).keys()],
+                y: isDepth ? season.depths : season.cumulative,
+                name: season.name,
+                line: { color: '#0066cc', width: 2 }
             }
-        };
-        Plotly.relayout(chartId, updatedLayout);
+        ], {
+            ...createLayout(
+                isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
+                isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)'
+            )
+        });
     });
 }
 
@@ -294,15 +289,8 @@ function populateSeasonSelector() {
     // Set up event listener
     selector.addEventListener('change', function() {
         if (this.value === 'average') {
-            // Remove highlighted trace if it exists
-            ['depthChart', 'cumulativeChart'].forEach(chartId => {
-                const chart = document.getElementById(chartId);
-                const highlightedIndex = chart.data.findIndex(trace => 
-                    trace.name !== 'Average' && trace.showlegend);
-                if (highlightedIndex >= 0) {
-                    Plotly.deleteTraces(chartId, highlightedIndex);
-                }
-            });
+            // Recreate the charts with just the background traces and average
+            createBaseCharts();
         } else {
             updateHighlightedSeason(this.value);
         }
