@@ -92,6 +92,50 @@ h1 {
     stroke: rgba(255, 255, 255, 0.2) !important;
 }
 
+/* Statistics styles */
+.statistics {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.statistics h2 {
+    font-size: 1.5em;
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.stats-summary {
+    margin-bottom: 2rem;
+}
+
+.stats-summary p {
+    line-height: 1.6;
+}
+
+.snowiest-seasons table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.snowiest-seasons th,
+.snowiest-seasons td {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.snowiest-seasons th {
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.snowiest-seasons tr.current-season {
+    background-color: rgba(0, 102, 255, 0.1);
+}
+
 /* Responsive styles */
 @media screen and (max-width: 768px) {
     .container {

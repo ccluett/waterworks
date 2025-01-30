@@ -212,45 +212,6 @@ function calculateAverage(arrays) {
     });
 }
 
-// Create the base charts
-function createBaseCharts() {
-    ['depthChart', 'cumulativeChart'].forEach(chartId => {
-        const isDepth = chartId === 'depthChart';
-        const traces = [];
-
-        const currentYear = new Date().getFullYear();
-        const customdata = Array.from({length: 365}, (_, i) => getDayDate(i, currentYear));
-
-        // Add background traces first
-        seasonsData.forEach(season => {
-            if (!season.isCurrent) {
-                traces.push({
-                    x: [...Array(365).keys()],
-                    y: isDepth ? season.depths : season.cumulative,
-                    customdata: customdata,
-                    line: { color: 'rgba(200,200,200,0.2)', width: 1 },
-                    hoverinfo: 'none',
-                    showlegend: false
-                });
-            }
-        });
-
-        // Add average trace last
-        traces.push({
-            x: [...Array(365).keys()],
-            y: isDepth ? averageData.depths : averageData.cumulative,
-            customdata: customdata,
-            name: 'Average',
-            line: { color: '#FF0000', width: 2 },  // Changed to red
-            hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
-        });
-
-        Plotly.newPlot(chartId, traces, createLayout(
-            isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
-            isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)'
-        ));
-    });
-}
 
 // Create layout for charts
 function createLayout(title, yTitle, seasonStartYear) {
@@ -304,7 +265,6 @@ function createLayout(title, yTitle, seasonStartYear) {
     };
 }
 
-
 // Update highlighted season
 function updateHighlightedSeason(seasonName) {
     const season = seasonsData.find(s => s.name === seasonName);
@@ -338,7 +298,7 @@ function updateHighlightedSeason(seasonName) {
             y: isDepth ? averageData.depths : averageData.cumulative,
             customdata: customdata,
             name: 'Average',
-            line: { color: '#ffffff', width: 2 },  // Changed to red
+            line: { color: '#FFFFFF', width: 2 },  // Changed to red
             hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
         });
 
@@ -348,7 +308,7 @@ function updateHighlightedSeason(seasonName) {
             y: isDepth ? season.depths : season.cumulative,
             customdata: customdata,
             name: season.name,
-            line: { color: '#2387fa', width: 3 },  // Changed to bright blue
+            line: { color: '#3177f7', width: 3 },  // Changed to bright blue
             hovertemplate: `%{customdata}<br>${season.name} : %{y:.1f}<extra></extra>`
         });
 
@@ -356,6 +316,46 @@ function updateHighlightedSeason(seasonName) {
             isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
             isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)',
             seasonStartYear
+        ));
+    });
+}
+
+// Create the base charts
+function createBaseCharts() {
+    ['depthChart', 'cumulativeChart'].forEach(chartId => {
+        const isDepth = chartId === 'depthChart';
+        const traces = [];
+
+        const currentYear = new Date().getFullYear();
+        const customdata = Array.from({length: 365}, (_, i) => getDayDate(i, currentYear));
+
+        // Add background traces first
+        seasonsData.forEach(season => {
+            if (!season.isCurrent) {
+                traces.push({
+                    x: [...Array(365).keys()],
+                    y: isDepth ? season.depths : season.cumulative,
+                    customdata: customdata,
+                    line: { color: 'rgba(200,200,200,0.2)', width: 1 },
+                    hoverinfo: 'none',
+                    showlegend: false
+                });
+            }
+        });
+
+        // Add average trace last
+        traces.push({
+            x: [...Array(365).keys()],
+            y: isDepth ? averageData.depths : averageData.cumulative,
+            customdata: customdata,
+            name: 'Average',
+            line: { color: '#FF0000', width: 3 },  // Changed to red
+            hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
+        });
+
+        Plotly.newPlot(chartId, traces, createLayout(
+            isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
+            isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)'
         ));
     });
 }
@@ -389,11 +389,116 @@ function populateSeasonSelector() {
     });
 }
 
+// Calculate statistics
+function calculateStatistics(rawData) {
+    // Filter valid data
+    const validData = rawData.filter(row => 
+        row.SNWD !== null && row.SNWD !== -9999 && 
+        row.SNOW !== null && row.SNOW !== -9999
+    );
+
+    // Calculate basic statistics
+    const maxDepth = Math.max(...validData.map(row => row.SNWD)) / 25.4;  // Convert to inches
+    const maxDailySnowfall = Math.max(...validData.map(row => row.SNOW)) / 25.4;  // Convert to inches
+    
+    // Calculate season totals, ranks, and max depths
+    const seasonTotals = {};
+    const seasonMaxDepths = {};
+    seasonsData.forEach(season => {
+        // Calculate total snowfall for the season
+        let totalSnow = season.cumulative[season.cumulative.length - 1];
+        
+        // For current season, use the last valid cumulative value
+        if (season.isCurrent) {
+            const lastValidIndex = season.cumulative.findLastIndex(val => val !== null && !isNaN(val));
+            totalSnow = lastValidIndex >= 0 ? season.cumulative[lastValidIndex] : 0;
+        }
+        
+        if (totalSnow !== null && !isNaN(totalSnow)) {
+            seasonTotals[season.name] = totalSnow;
+        } else if (season.isCurrent) {
+            // Ensure current season is included even if no snow yet
+            seasonTotals[season.name] = 0;
+        }
+        
+        // Calculate max depth for the season
+        const maxSeasonDepth = Math.max(...season.depths.filter(d => d !== null && !isNaN(d)));
+        if (!isNaN(maxSeasonDepth)) {
+            seasonMaxDepths[season.name] = maxSeasonDepth;
+        }
+    });
+
+    // Sort seasons by total snowfall
+    const rankedSeasons = Object.entries(seasonTotals)
+        .sort(([,a], [,b]) => b - a)
+        .map(([season, total], index) => ({
+            rank: index + 1,
+            season,
+            total,
+            isCurrent: season === currentSeason
+        }));
+
+    // Calculate averages (excluding current season)
+    const completedSeasons = Object.entries(seasonTotals).filter(([season]) => season !== currentSeason);
+    const avgTotalSnow = completedSeasons.reduce((a, [,b]) => a + b, 0) / completedSeasons.length;
+    const avgMaxDepth = Object.values(seasonMaxDepths).reduce((a, b) => a + b, 0) / Object.values(seasonMaxDepths).length;
+
+    // Update DOM with statistics
+    document.getElementById('averages').innerHTML = `
+        Average total snowfall: ${avgTotalSnow.toFixed(1)} inches<br>
+        Average max snow depth: ${avgMaxDepth.toFixed(1)} inches<br>
+        Maximum recorded depth: ${maxDepth.toFixed(1)} inches<br>
+        Maximum daily snowfall: ${maxDailySnowfall.toFixed(1)} inches
+    `;
+
+    // Update snowiest seasons table
+    const tbody = document.getElementById('snowiest-table').getElementsByTagName('tbody')[0];
+    tbody.innerHTML = '';
+
+    // Get current season's rank and data
+    const currentSeasonData = rankedSeasons.find(s => s.isCurrent);
+    
+    // Display top 5 seasons
+    rankedSeasons.slice(0, 5).forEach((data) => {
+        const tr = document.createElement('tr');
+        tr.className = data.season === currentSeason ? 'current-season' : '';
+        tr.innerHTML = `
+            <td>${data.rank}</td>
+            <td>${data.season}</td>
+            <td>${data.total.toFixed(1)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    // If current season is not in top 5, add it at the bottom with ellipsis
+    if (currentSeasonData && currentSeasonData.rank > 5) {
+        // Add ellipsis row
+        const ellipsisRow = document.createElement('tr');
+        ellipsisRow.innerHTML = `
+            <td>...</td>
+            <td>...</td>
+            <td>...</td>
+        `;
+        tbody.appendChild(ellipsisRow);
+
+        // Add current season
+        const currentRow = document.createElement('tr');
+        currentRow.className = 'current-season';
+        currentRow.innerHTML = `
+            <td>${currentSeasonData.rank}</td>
+            <td>${currentSeasonData.season}</td>
+            <td>${currentSeasonData.total.toFixed(1)}</td>
+        `;
+        tbody.appendChild(currentRow);
+    }
+}
+
 // Main initialization
 (async function init() {
     try {
         const rawData = await fetchData();
         processSeasons(rawData);
+        calculateStatistics(rawData);        
         createBaseCharts();
         populateSeasonSelector();
         
