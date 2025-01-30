@@ -1,42 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mt Washington Snow Data - Waterworks Labs</title>
-    <link href="https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style.css">
-    <link rel="stylesheet" href="snow.css">
-    
-    <!-- Core React Dependencies -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel for JSX support -->
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-
-    <!-- Helper Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-
-    <!-- Recharts UMD build -->
-    <script src="https://cdn.jsdelivr.net/npm/recharts@2.14.0/umd/Recharts.min.js"></script>
-
+    <title>Snow Data Visualization</title>
+    <!-- Load Plotly first -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- Then PapaParse from a non-tracking CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <style>
-        .snow-charts { max-width: 1200px; margin: 0 auto; }
-        .chart-container { margin: 2rem 0; padding: 1rem; background: #fff; }
-        .loading { text-align: center; padding: 2rem; }
-        .custom-tooltip { background: white; padding: 1rem; border: 1px solid #ccc; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .chart-container { margin: 2rem 0; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #seasonSelector { padding: 10px; margin-bottom: 20px; width: 300px; }
     </style>
 </head>
 <body>
-    <main>
-        <div class="container">
-            <h1>Mt Washington Snow Data</h1>
-            <div id="snow-visualization"></div>
-        </div>
-    </main>
-
-    <!-- Application Script -->
-    <script src="snow.js" type="text/babel"></script>
+    <div class="container">
+        <h1>Mt. Washington Snowfall</h1>
+        <select id="seasonSelector">
+            <option value="average">Average</option>
+        </select>
+        <div id="depthChart" class="chart-container"></div>
+        <div id="cumulativeChart" class="chart-container"></div>
+    </div>
+    <script src="snow.js"></script>
 </body>
 </html>

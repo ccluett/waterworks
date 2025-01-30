@@ -1,334 +1,299 @@
-const { useState, useEffect } = React;
-const {
-    LineChart,
-    Line,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer
-} = Recharts;
-
-const SnowVisualization = () => {
-    const [snowData, setSnowData] = useState({ current: [], average: [] });
-    const [loading, setLoading] = useState(true);
-
-    const interpolateSnowDepth = (depths) => {
-        const interpolated = [...depths];
-        let startIdx = -1;
-
-        // Find first non-null value
-        for (let i = 0; i < interpolated.length; i++) {
-            if (interpolated[i] !== null) {
-                startIdx = i;
-                break;
-            }
-        }
-
-        // Find last non-null value
-        let endIdx = -1;
-        for (let i = interpolated.length - 1; i >= 0; i--) {
-            if (interpolated[i] !== null) {
-                endIdx = i;
-                break;
-            }
-        }
-
-        if (startIdx === -1 || endIdx === -1) return interpolated;
-
-        // Linear interpolation
-        let prevVal = interpolated[startIdx];
-        let prevIdx = startIdx;
-
-        for (let i = startIdx + 1; i <= endIdx; i++) {
-            if (interpolated[i] === null) {
-                let nextIdx = i;
-                while (nextIdx <= endIdx && interpolated[nextIdx] === null) {
-                    nextIdx++;
-                }
-                if (nextIdx > endIdx) break;
-                
-                const slope = (interpolated[nextIdx] - prevVal) / (nextIdx - prevIdx);
-                for (let j = prevIdx + 1; j < nextIdx; j++) {
-                    interpolated[j] = prevVal + slope * (j - prevIdx);
-                }
-                prevVal = interpolated[nextIdx];
-                prevIdx = nextIdx;
-                i = nextIdx;
-            } else {
-                prevVal = interpolated[i];
-                prevIdx = i;
-            }
-        }
-
-        return interpolated;
-    };
-
-    const processSnowData = (rawData) => {
-        const cleanData = rawData.map(row => ({
-            date: new Date(row.DATE),
-            snowDepth: row.SNWD === -9999 ? null : row.SNWD / 25.4,
-            snowfall: row.SNOW === -9999 ? 0 : row.SNOW / 25.4
-        }));
-
-        const seasonData = {};
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth();
-        const currentSeason = currentMonth >= 7 ? 
-            `${currentYear}-${currentYear + 1}` : 
-            `${currentYear - 1}-${currentYear}`;
-
-        cleanData.forEach(row => {
-            const month = row.date.getMonth();
-            const year = row.date.getFullYear();
-            const seasonStart = month >= 7 ? year : year - 1;
-            const seasonKey = `${seasonStart}-${seasonStart + 1}`;
-            
-            if (row.date > new Date()) return;
-
-            const seasonStartDate = new Date(seasonStart, 7, 1);
-            const dayIndex = Math.floor((row.date - seasonStartDate) / (1000 * 60 * 60 * 24));
-            
-            if (dayIndex >= 0 && dayIndex < 365) {
-                if (!seasonData[seasonKey]) {
-                    seasonData[seasonKey] = Array(365).fill().map(() => ({
-                        snowDepth: null,
-                        snowfall: null,
-                        date: null
-                    }));
-                }
-
-                seasonData[seasonKey][dayIndex] = {
-                    snowDepth: row.snowDepth,
-                    snowfall: row.snowfall,
-                    date: row.date
-                };
-            }
-        });
-
-        const seasonTotals = [];
-        Object.keys(seasonData).forEach(seasonKey => {
-            if (seasonKey !== currentSeason) {
-                const depths = seasonData[seasonKey].map(d => 
-                    d && d.snowDepth !== null ? d.snowDepth : null
-                );
-                const interpolatedDepths = interpolateSnowDepth(depths);
-                
-                let cumulative = 0;
-                const cumulativeSnow = seasonData[seasonKey].map((d, idx) => {
-                    if (d && d.snowfall) cumulative += d.snowfall;
-                    return cumulative;
-                });
-
-                seasonTotals.push({
-                    depths: interpolatedDepths,
-                    cumulative: cumulativeSnow
-                });
-            }
-        });
-
-        const averageDepth = Array(365).fill(null);
-        const averageCumulative = Array(365).fill(null);
-        
-        for (let i = 0; i < 365; i++) {
-            let depthSum = 0;
-            let depthCount = 0;
-            let cumSum = 0;
-            let cumCount = 0;
-
-            seasonTotals.forEach(season => {
-                if (season.depths[i] !== null) {
-                    depthSum += season.depths[i];
-                    depthCount++;
-                }
-                if (season.cumulative[i] !== null) {
-                    cumSum += season.cumulative[i];
-                    cumCount++;
-                }
-            });
-
-            averageDepth[i] = depthCount > 0 ? depthSum / depthCount : null;
-            averageCumulative[i] = cumCount > 0 ? cumSum / cumCount : null;
-        }
-
-        const currentDepths = (seasonData[currentSeason] || []).map(d => 
-            d && d.snowDepth !== null ? d.snowDepth : null
-        );
-        const interpolatedCurrentDepths = interpolateSnowDepth(currentDepths);
-        
-        let currentCumulativeSnow = 0;
-        const currentData = [];
-        if (seasonData[currentSeason]) {
-            seasonData[currentSeason].forEach((day, idx) => {
-                if (day && day.date) {
-                    if (day.snowfall) currentCumulativeSnow += day.snowfall;
-                    currentData.push({
-                        dayIndex: idx,
-                        snowDepth: interpolatedCurrentDepths[idx],
-                        cumulativeSnow: currentCumulativeSnow,
-                        date: new Date(2000, 7, 1 + idx)
-                    });
-                }
-            });
-        }
-
-        const averageData = [];
-        for (let i = 0; i < 365; i++) {
-            averageData.push({
-                dayIndex: i,
-                snowDepth: averageDepth[i],
-                cumulativeSnow: averageCumulative[i],
-                date: new Date(2000, 7, 1 + i)
-            });
-        }
-
-        return {
-            current: currentData,
-            average: averageData
-        };
-    };
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const response = await fetch(
-                    'https://www.ncei.noaa.gov/access/services/data/v1?' +
-                    'dataset=daily-summaries&' +
-                    'stations=USW00014755&' +
-                    'dataTypes=SNOW,SNWD&' +
-                    'startDate=1950-01-01&' +
-                    'endDate=' + new Date().toISOString().split('T')[0] + '&' +
-                    'format=csv'
-                );
-                
-                const text = await response.text();
-                
-                Papa.parse(text, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
-                    complete: (results) => {
-                        const processed = processSnowData(results.data);
-                        console.log('Processed data:', processed);
-                        setSnowData(processed);
-                        setLoading(false);
-                    }
-                });
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
-
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            const dayIndex = payload[0].payload.dayIndex;
-            const date = new Date(2000, 7, 1 + (dayIndex || 0));
-            const value = payload[0].value;
-            const dataType = payload[0].dataKey === 'snowDepth' ? 'Snow Depth' : 'Cumulative Snowfall';
-            
-            return (
-                <div className="custom-tooltip">
-                    <p>{date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</p>
-                    <p>{`${dataType}: ${value ? value.toFixed(1) : 'N/A'} inches`}</p>
-                </div>
-            );
-        }
-        return null;
-    };
-
-    if (loading) {
-        return <div className="loading">Loading snow data...</div>;
-    }
-
-    return (
-        <div className="snow-charts">
-            <div className="chart-container">
-                <h2>Snow Depth</h2>
-                <ResponsiveContainer width="100%" height={400}>
-                    <LineChart>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                            dataKey="dayIndex"
-                            type="number"
-                            domain={[0, 364]}
-                            tickFormatter={(index) => {
-                                const date = new Date(2000, 7, 1 + index);
-                                return date.toLocaleDateString('en-US', { month: 'short' });
-                            }}
-                            ticks={[0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]}
-                        />
-                        <YAxis
-                            label={{ value: 'Snow Depth (inches)', angle: -90, position: 'insideLeft' }}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Line
-                            data={snowData.average}
-                            dataKey="snowDepth"
-                            stroke="#000"
-                            strokeWidth={2}
-                            dot={false}
-                            name="Average"
-                        />
-                        <Line
-                            data={snowData.current}
-                            dataKey="snowDepth"
-                            stroke="#0066cc"
-                            strokeWidth={2}
-                            dot={false}
-                            name="Current Season"
-                        />
-                    </LineChart>
-                </ResponsiveContainer>
-            </div>
-
-            <div className="chart-container">
-                <h2>Cumulative Snowfall</h2>
-                <ResponsiveContainer width="100%" height={400}>
-                    <LineChart>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                            dataKey="dayIndex"
-                            type="number"
-                            domain={[0, 364]}
-                            tickFormatter={(index) => {
-                                const date = new Date(2000, 7, 1 + index);
-                                return date.toLocaleDateString('en-US', { month: 'short' });
-                            }}
-                            ticks={[0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]}
-                        />
-                        <YAxis
-                            label={{ value: 'Cumulative Snowfall (inches)', angle: -90, position: 'insideLeft' }}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Line
-                            data={snowData.average}
-                            dataKey="cumulativeSnow"
-                            stroke="#000"
-                            strokeWidth={2}
-                            dot={false}
-                            name="Average"
-                        />
-                        <Line
-                            data={snowData.current}
-                            dataKey="cumulativeSnow"
-                            stroke="#00994c"
-                            strokeWidth={2}
-                            dot={false}
-                            name="Current Season"
-                        />
-                    </LineChart>
-                </ResponsiveContainer>
-            </div>
-        </div>
-    );
+// Configuration and State
+const config = {
+    station: 'USW00014755',
+    startDate: '1950-01-01',
+    endDate: new Date().toISOString().split('T')[0],
+    dataTypes: 'SNOW,SNWD'
 };
 
-const root = ReactDOM.createRoot(document.getElementById('snow-visualization'));
-root.render(<SnowVisualization />);
+let seasonsData = [];
+let averageData = { depths: [], cumulative: [] };
+let currentSeason = '';
+
+// Data Fetching Function
+async function fetchData() {
+    const url = new URL('https://www.ncei.noaa.gov/access/services/data/v1');
+    url.searchParams.set('dataset', 'daily-summaries');
+    url.searchParams.set('stations', config.station);
+    url.searchParams.set('dataTypes', config.dataTypes);
+    url.searchParams.set('startDate', config.startDate);
+    url.searchParams.set('endDate', config.endDate);
+    url.searchParams.set('format', 'csv');
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const text = await response.text();
+        
+        return new Promise((resolve) => {
+            Papa.parse(text, {
+                header: true,
+                dynamicTyping: true,
+                complete: (results) => {
+                    resolve(results.data.filter(row => row.DATE));
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Data fetch failed:', error);
+        return [];
+    }
+}
+
+// Helper function to interpolate missing snow depth values
+function interpolateSnowDepth(depths) {
+    // Find valid values and their indices
+    const validIndices = [];
+    const validValues = [];
+    for (let i = 0; i < depths.length; i++) {
+        if (depths[i] !== null && !isNaN(depths[i])) {
+            validIndices.push(i);
+            validValues.push(depths[i]);
+        }
+    }
+
+    if (validIndices.length < 2) return depths;
+
+    // Interpolate between valid values
+    const result = [...depths];
+    for (let i = 0; i < validIndices.length - 1; i++) {
+        const start = validIndices[i];
+        const end = validIndices[i + 1];
+        const startVal = validValues[i];
+        const endVal = validValues[i + 1];
+
+        for (let j = start + 1; j < end; j++) {
+            const fraction = (j - start) / (end - start);
+            result[j] = startVal + (endVal - startVal) * fraction;
+        }
+    }
+
+    return result;
+}
+
+// Process seasons (aligned with MATLAB process_daily_seasons function)
+function processSeasons(rawData) {
+    // Clean and convert data
+    const cleanData = rawData.map(row => ({
+        date: new Date(row.DATE),
+        depth: row.SNWD === -9999 ? null : row.SNWD / 25.4, // Convert mm to inches
+        snowfall: row.SNOW === -9999 ? 0 : row.SNOW / 25.4  // Convert mm to inches
+    })).filter(row => row.date && !isNaN(row.date.getTime()));
+
+    // Determine current season
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
+    currentSeason = currentMonth >= 7 ? 
+        `${currentYear}-${currentYear + 1}` : 
+        `${currentYear - 1}-${currentYear}`;
+
+    // Initialize season containers
+    const seasons = {};
+    cleanData.forEach(row => {
+        const year = row.date.getMonth() >= 7 ? 
+            row.date.getFullYear() : 
+            row.date.getFullYear() - 1;
+        const seasonKey = `${year}-${year + 1}`;
+        
+        if (!seasons[seasonKey]) {
+            seasons[seasonKey] = {
+                depths: new Array(365).fill(null),
+                cumulative: new Array(365).fill(0),
+                dates: new Array(365).fill(null),
+                isCurrent: seasonKey === currentSeason
+            };
+        }
+
+        // Calculate day index (Aug 1 = 0)
+        const seasonStart = new Date(year, 7, 1); // August 1st
+        const dayIndex = Math.floor((row.date - seasonStart) / (24 * 60 * 60 * 1000));
+        
+        if (dayIndex >= 0 && dayIndex < 365) {
+            seasons[seasonKey].depths[dayIndex] = row.depth;
+            seasons[seasonKey].cumulative[dayIndex] = row.snowfall;
+            seasons[seasonKey].dates[dayIndex] = row.date;
+        }
+    });
+
+    // Process each season
+    seasonsData = Object.entries(seasons).map(([season, data]) => {
+        // Interpolate depths
+        let interpolatedDepths = interpolateSnowDepth([...data.depths]);
+        
+        // Calculate cumulative snowfall
+        let cumulativeSnow = 0;
+        const cumulative = data.cumulative.map((dailySnow, idx) => {
+            if (data.dates[idx]) {
+                cumulativeSnow += dailySnow;
+                return cumulativeSnow;
+            }
+            return data.isCurrent ? null : cumulativeSnow;
+        });
+
+        return {
+            name: season,
+            depths: interpolatedDepths,
+            cumulative: cumulative,
+            isCurrent: data.isCurrent
+        };
+    });
+
+    // Calculate averages (excluding current season)
+    const validSeasons = seasonsData.filter(s => !s.isCurrent);
+    averageData = {
+        depths: calculateAverage(validSeasons.map(s => s.depths)),
+        cumulative: calculateAverage(validSeasons.map(s => s.cumulative))
+    };
+}
+
+// Calculate average across seasons
+function calculateAverage(arrays) {
+    return Array.from({length: 365}, (_, i) => {
+        const values = arrays.map(a => a[i]).filter(v => v !== null && !isNaN(v));
+        return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    });
+}
+
+// Main initialization
+(async function init() {
+    try {
+        const rawData = await fetchData();
+        processSeasons(rawData);
+        createBaseCharts();
+        populateSeasonSelector();
+        
+        // Initialize with the most recent season
+        if (seasonsData.length > 0) {
+            const selector = document.getElementById('seasonSelector');
+            selector.value = seasonsData[seasonsData.length - 1].name;
+            updateHighlightedSeason(seasonsData[seasonsData.length - 1].name);
+        }
+    } catch (error) {
+        console.error('Initialization failed:', error);
+    }
+})();
+
+function createBaseCharts() {
+    // Depth Chart
+    Plotly.newPlot('depthChart', [{
+        x: [...Array(365).keys()],
+        y: averageData.depths,
+        name: 'Average',
+        line: { color: '#000', width: 2 }
+    }], {
+        ...createLayout('Snow Depth', 'Snow Depth (inches)')
+    });
+
+    // Cumulative Chart
+    Plotly.newPlot('cumulativeChart', [{
+        x: [...Array(365).keys()],
+        y: averageData.cumulative,
+        name: 'Average',
+        line: { color: '#000', width: 2 }
+    }], {
+        ...createLayout('Cumulative Snowfall', 'Cumulative Snowfall (inches)')
+    });
+
+    // Add background seasons
+    seasonsData.forEach(season => {
+        if (!season.isCurrent) {
+            addBackgroundTrace(season, 'depthChart');
+            addBackgroundTrace(season, 'cumulativeChart');
+        }
+    });
+}
+
+function addBackgroundTrace(season, chartId) {
+    Plotly.addTraces(chartId, {
+        x: [...Array(365).keys()],
+        y: chartId === 'depthChart' ? season.depths : season.cumulative,
+        line: { color: 'rgba(200,200,200,0.2)', width: 1 },
+        hoverinfo: 'none',
+        showlegend: false
+    });
+}
+
+function createLayout(title, yTitle) {
+    return {
+        title: title,
+        xaxis: {
+            tickvals: [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334],
+            ticktext: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+            title: 'Month'
+        },
+        yaxis: { 
+            title: yTitle,
+            hoverformat: '.1f'
+        },
+        hovermode: 'x unified',
+        showlegend: true,
+        margin: { t: 40, b: 60 }
+    };
+}
+
+function updateHighlightedSeason(seasonName) {
+    const season = seasonsData.find(s => s.name === seasonName);
+    if (!season) return;
+    
+    // Update both charts
+    ['depthChart', 'cumulativeChart'].forEach(chartId => {
+        const isDepth = chartId === 'depthChart';
+        const chart = document.getElementById(chartId);
+        const existingTraces = chart.data;
+        
+        // Find if there's already a highlighted trace
+        const highlightedIndex = existingTraces.findIndex(trace => trace.name === 'Highlighted');
+        
+        const newTrace = {
+            x: [...Array(365).keys()],
+            y: isDepth ? season.depths : season.cumulative,
+            name: 'Highlighted',
+            line: { color: '#0066cc', width: 2 }
+        };
+
+        if (highlightedIndex >= 0) {
+            // Update existing highlighted trace
+            Plotly.deleteTraces(chartId, highlightedIndex);
+            Plotly.addTraces(chartId, newTrace);
+        } else {
+            // Add new highlighted trace
+            Plotly.addTraces(chartId, newTrace);
+        }
+    });
+}
+
+function populateSeasonSelector() {
+    const selector = document.getElementById('seasonSelector');
+    selector.innerHTML = ''; // Clear existing options
+    
+    // Add average option
+    const avgOption = document.createElement('option');
+    avgOption.value = 'average';
+    avgOption.textContent = 'Average';
+    selector.appendChild(avgOption);
+    
+    // Add season options
+    seasonsData.forEach(season => {
+        const option = document.createElement('option');
+        option.value = season.name;
+        option.textContent = season.name;
+        selector.appendChild(option);
+    });
+
+    // Set up event listener
+    selector.addEventListener('change', function() {
+        if (this.value === 'average') {
+            // Remove highlighted trace if it exists
+            ['depthChart', 'cumulativeChart'].forEach(chartId => {
+                const chart = document.getElementById(chartId);
+                const highlightedIndex = chart.data.findIndex(trace => trace.name === 'Highlighted');
+                if (highlightedIndex >= 0) {
+                    Plotly.deleteTraces(chartId, highlightedIndex);
+                }
+            });
+        } else {
+            updateHighlightedSeason(this.value);
+        }
+    });
+}
