@@ -7,27 +7,25 @@
     <link href="https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="snow.css">
-    <!-- Load React and dependencies BEFORE Recharts -->
+    
+    <!-- Core React Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Type Definitions -->
+    <script src="https://unpkg.com/@types/react@18.2.45/index.d.ts" crossorigin></script>
+    <script src="https://unpkg.com/@types/react-dom@18.2.18/index.d.ts" crossorigin></script>
+
+    <!-- Helper Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js" crossorigin></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js" crossorigin></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" crossorigin></script>
-    <!-- Load D3.js which Recharts depends on -->
+
+    <!-- Data Visualization Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" crossorigin></script>
-    <!-- Now load Recharts -->
-    <script src="https://unpkg.com/recharts@2.12.2/umd/Recharts.js" crossorigin></script>
+    <script src="https://unpkg.com/recharts@2.14.0/umd/Recharts.min.js" crossorigin></script>
 </head>
 <body>
-    <!-- <header>
-        <div class="header-content">
-            <div class="logo">
-                <a href="/">
-                    <img src="../pictures/.png" alt="">
-                </a>
-            </div>
-        </div>
-    </header> -->
     <main>
         <div class="container">
             <h1>Mt Washington Snow Data</h1>
@@ -35,9 +33,10 @@
         </div>
     </main>
     <footer>
-        <p>Copyright © 2025 . All Rights Reserved.</p>
+        <p>Copyright © 2024 Waterworks Labs. All Rights Reserved.</p>
     </footer>
-    <!-- Load your application code last -->
+
+    <!-- Application Script -->
     <script src="snow.js"></script>
 </body>
 </html>
