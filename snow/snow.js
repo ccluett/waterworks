@@ -241,7 +241,7 @@ function createBaseCharts() {
             y: isDepth ? averageData.depths : averageData.cumulative,
             customdata: customdata,
             name: 'Average',
-            line: { color: '#000', width: 2 },
+            line: { color: '#FF0000', width: 2 },  // Changed to red
             hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
         });
 
@@ -256,24 +256,54 @@ function createBaseCharts() {
 function createLayout(title, yTitle, seasonStartYear) {
     const year = seasonStartYear || new Date().getFullYear();
     return {
-        title: title,
+        title: {
+            text: title,
+            font: {
+                color: 'white'
+            }
+        },
         xaxis: {
             tickvals: [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334],
             ticktext: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
-            title: 'Month'
+            title: {
+                text: 'Month',
+                font: {
+                    color: 'white'  // Make x-axis label white
+                }
+            },
+            tickfont: {
+                color: 'white'  // Make tick labels white
+            }
         },
         yaxis: { 
-            title: yTitle,
-            hoverformat: '.1f'
+            title: {
+                text: yTitle,
+                font: {
+                    color: 'white'  // Make y-axis label white
+                }
+            },
+            tickfont: {
+                color: 'white'  // Make tick labels white
+            },
+            hoverformat: '.1f',
+            gridcolor: 'rgba(255, 255, 255, 0.1)'  // Lighter grid lines
         },
+        plot_bgcolor: 'rgba(0,0,0,0)',  // Transparent plot background
+        paper_bgcolor: 'rgba(0,0,0,0)',  // Transparent paper background
         hovermode: 'x unified',
         showlegend: true,
+        legend: {
+            font: {
+                color: 'white'  // Make legend text white
+            }
+        },
         margin: { t: 40, b: 60 },
         hoverlabel: {
             namelength: -1
         }
     };
 }
+
 
 // Update highlighted season
 function updateHighlightedSeason(seasonName) {
@@ -308,7 +338,7 @@ function updateHighlightedSeason(seasonName) {
             y: isDepth ? averageData.depths : averageData.cumulative,
             customdata: customdata,
             name: 'Average',
-            line: { color: '#000', width: 2 },
+            line: { color: '#ffffff', width: 2 },  // Changed to red
             hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
         });
 
@@ -318,7 +348,7 @@ function updateHighlightedSeason(seasonName) {
             y: isDepth ? season.depths : season.cumulative,
             customdata: customdata,
             name: season.name,
-            line: { color: '#0066cc', width: 2 },
+            line: { color: '#2387fa', width: 3 },  // Changed to bright blue
             hovertemplate: `%{customdata}<br>${season.name} : %{y:.1f}<extra></extra>`
         });
 
