@@ -178,42 +178,37 @@ function calculateAverage(arrays) {
 })();
 
 function createBaseCharts() {
-    // Depth Chart
-    Plotly.newPlot('depthChart', [{
-        x: [...Array(365).keys()],
-        y: averageData.depths,
-        name: 'Average',
-        line: { color: '#000', width: 2 }
-    }], {
-        ...createLayout('Snow Depth', 'Snow Depth (inches)')
-    });
+    ['depthChart', 'cumulativeChart'].forEach(chartId => {
+        const isDepth = chartId === 'depthChart';
+        const traces = [];
 
-    // Cumulative Chart
-    Plotly.newPlot('cumulativeChart', [{
-        x: [...Array(365).keys()],
-        y: averageData.cumulative,
-        name: 'Average',
-        line: { color: '#000', width: 2 }
-    }], {
-        ...createLayout('Cumulative Snowfall', 'Cumulative Snowfall (inches)')
-    });
+        // Add background traces first
+        seasonsData.forEach(season => {
+            if (!season.isCurrent) {
+                traces.push({
+                    x: [...Array(365).keys()],
+                    y: isDepth ? season.depths : season.cumulative,
+                    line: { color: 'rgba(200,200,200,0.2)', width: 1 },
+                    hoverinfo: 'none',
+                    showlegend: false
+                });
+            }
+        });
 
-    // Add background seasons
-    seasonsData.forEach(season => {
-        if (!season.isCurrent) {
-            addBackgroundTrace(season, 'depthChart');
-            addBackgroundTrace(season, 'cumulativeChart');
-        }
-    });
-}
+        // Add average trace last
+        traces.push({
+            x: [...Array(365).keys()],
+            y: isDepth ? averageData.depths : averageData.cumulative,
+            name: 'Average',
+            line: { color: '#000', width: 2 }
+        });
 
-function addBackgroundTrace(season, chartId) {
-    Plotly.addTraces(chartId, {
-        x: [...Array(365).keys()],
-        y: chartId === 'depthChart' ? season.depths : season.cumulative,
-        line: { color: 'rgba(200,200,200,0.2)', width: 1 },
-        hoverinfo: 'none',
-        showlegend: false
+        Plotly.newPlot(chartId, traces, {
+            ...createLayout(
+                isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
+                isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)'
+            )
+        });
     });
 }
 
@@ -242,24 +237,38 @@ function updateHighlightedSeason(seasonName) {
     // Update both charts
     ['depthChart', 'cumulativeChart'].forEach(chartId => {
         const isDepth = chartId === 'depthChart';
-        
-        // Recreate the chart with just the average and the selected season
-        Plotly.newPlot(chartId, [
-            // Average trace
-            {
-                x: [...Array(365).keys()],
-                y: isDepth ? averageData.depths : averageData.cumulative,
-                name: 'Average',
-                line: { color: '#000', width: 2 }
-            },
-            // Selected season trace
-            {
-                x: [...Array(365).keys()],
-                y: isDepth ? season.depths : season.cumulative,
-                name: season.name,
-                line: { color: '#0066cc', width: 2 }
+        const traces = [];
+
+        // Add background traces first
+        seasonsData.forEach(s => {
+            if (!s.isCurrent) {
+                traces.push({
+                    x: [...Array(365).keys()],
+                    y: isDepth ? s.depths : s.cumulative,
+                    line: { color: 'rgba(200,200,200,0.2)', width: 1 },
+                    hoverinfo: 'none',
+                    showlegend: false
+                });
             }
-        ], {
+        });
+
+        // Add average trace
+        traces.push({
+            x: [...Array(365).keys()],
+            y: isDepth ? averageData.depths : averageData.cumulative,
+            name: 'Average',
+            line: { color: '#000', width: 2 }
+        });
+
+        // Add selected season trace
+        traces.push({
+            x: [...Array(365).keys()],
+            y: isDepth ? season.depths : season.cumulative,
+            name: season.name,
+            line: { color: '#0066cc', width: 2 }
+        });
+
+        Plotly.newPlot(chartId, traces, {
             ...createLayout(
                 isDepth ? 'Snow Depth' : 'Cumulative Snowfall',
                 isDepth ? 'Snow Depth (inches)' : 'Cumulative Snowfall (inches)'
@@ -289,7 +298,6 @@ function populateSeasonSelector() {
     // Set up event listener
     selector.addEventListener('change', function() {
         if (this.value === 'average') {
-            // Recreate the charts with just the background traces and average
             createBaseCharts();
         } else {
             updateHighlightedSeason(this.value);
