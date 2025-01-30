@@ -192,8 +192,145 @@ const SnowVisualization = () => {
         };
     };
 
-    // Keep the rest of the component code the same
-    // ... [remaining useEffect and JSX code] ...
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await fetch(
+                    'https://www.ncei.noaa.gov/access/services/data/v1?' +
+                    'dataset=daily-summaries&' +
+                    'stations=USW00014755&' +
+                    'dataTypes=SNOW,SNWD&' +
+                    'startDate=1950-01-01&' +
+                    'endDate=' + new Date().toISOString().split('T')[0] + '&' +
+                    'format=csv'
+                );
+                
+                const text = await response.text();
+                
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const processed = processSnowData(results.data);
+                        console.log('Processed data:', processed);
+                        setSnowData(processed);
+                        setLoading(false);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            const dayIndex = payload[0].payload.dayIndex;
+            const date = new Date(2000, 7, 1 + (dayIndex || 0));
+            const value = payload[0].value;
+            const dataType = payload[0].dataKey === 'snowDepth' ? 'Snow Depth' : 'Cumulative Snowfall';
+            
+            return (
+                <div className="custom-tooltip">
+                    <p>{date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</p>
+                    <p>{`${dataType}: ${value ? value.toFixed(1) : 'N/A'} inches`}</p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    if (loading) {
+        return <div className="loading">Loading snow data...</div>;
+    }
+
+    return (
+        <div className="snow-charts">
+            <div className="chart-container">
+                <h2>Snow Depth</h2>
+                <ResponsiveContainer width="100%" height={400}>
+                    <LineChart>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                            dataKey="dayIndex"
+                            type="number"
+                            domain={[0, 364]}
+                            tickFormatter={(index) => {
+                                const date = new Date(2000, 7, 1 + index);
+                                return date.toLocaleDateString('en-US', { month: 'short' });
+                            }}
+                            ticks={[0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]}
+                        />
+                        <YAxis
+                            label={{ value: 'Snow Depth (inches)', angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Line
+                            data={snowData.average}
+                            dataKey="snowDepth"
+                            stroke="#000"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Average"
+                        />
+                        <Line
+                            data={snowData.current}
+                            dataKey="snowDepth"
+                            stroke="#0066cc"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Current Season"
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+
+            <div className="chart-container">
+                <h2>Cumulative Snowfall</h2>
+                <ResponsiveContainer width="100%" height={400}>
+                    <LineChart>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                            dataKey="dayIndex"
+                            type="number"
+                            domain={[0, 364]}
+                            tickFormatter={(index) => {
+                                const date = new Date(2000, 7, 1 + index);
+                                return date.toLocaleDateString('en-US', { month: 'short' });
+                            }}
+                            ticks={[0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]}
+                        />
+                        <YAxis
+                            label={{ value: 'Cumulative Snowfall (inches)', angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Line
+                            data={snowData.average}
+                            dataKey="cumulativeSnow"
+                            stroke="#000"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Average"
+                        />
+                        <Line
+                            data={snowData.current}
+                            dataKey="cumulativeSnow"
+                            stroke="#00994c"
+                            strokeWidth={2}
+                            dot={false}
+                            name="Current Season"
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
 };
 
 const root = ReactDOM.createRoot(document.getElementById('snow-visualization'));
