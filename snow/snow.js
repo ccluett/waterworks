@@ -14,7 +14,6 @@ const SnowVisualization = () => {
     const [snowData, setSnowData] = useState({ current: [], average: [] });
     const [loading, setLoading] = useState(true);
 
-    // Updated interpolation function without modern operators
     const interpolateSnowDepth = (depths) => {
         const interpolated = [...depths];
         let startIdx = -1;
@@ -66,7 +65,6 @@ const SnowVisualization = () => {
         return interpolated;
     };
 
-    // Updated data processing with compatible syntax
     const processSnowData = (rawData) => {
         const cleanData = rawData.map(row => ({
             date: new Date(row.DATE),
@@ -130,7 +128,6 @@ const SnowVisualization = () => {
             }
         });
 
-        // Average calculation remains the same
         const averageDepth = Array(365).fill(null);
         const averageCumulative = Array(365).fill(null);
         
