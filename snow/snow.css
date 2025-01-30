@@ -1,110 +1,115 @@
-.chart-container {
-    background: #ffffff;  /* White background */
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 30px;
-    min-height: 400px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* Base styles matching main website */
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'Arvo', serif;
+    background-color: black;
+    color: white;
+    min-height: 100vh;
 }
 
 .container {
     max-width: 1200px;
     margin: 0 auto;
+    padding: 20px 50px;
+}
+
+/* Header styles */
+h1 {
+    font-size: 2em;
+    line-height: 1.4;
+    font-weight: 700;
+    margin-bottom: 30px;
+    padding-top: 40px;
+}
+
+/* Chart container styles */
+.chart-container {
+    margin: 2rem 0;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     padding: 20px;
+    transition: background-color 0.3s ease;
 }
 
-/* Chart title styling */
-.chart-container h2 {
-    color: #000000;
-    margin-bottom: 20px;
-    font-size: 1.5em;
+.chart-container:hover {
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Loading state */
-.loading {
-    text-align: center;
-    padding: 20px;
-    color: #000000;
-    font-size: 1.2em;
-}
-
-/* Grid lines */
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
-    stroke: #cccccc;
-}
-
-#snow-visualization {
-    margin-top: 30px;
-}
-
-.loading {
-    text-align: center;
-    padding: 20px;
-    color: white;
-    font-size: 1.2em;
-}
-
-.season-selector {
-    margin: 20px 0;
-    text-align: center;
-}
-
-.season-selector select {
-    padding: 8px 16px;
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+/* Season selector styles */
+#seasonSelector {
+    padding: 12px;
+    margin-bottom: 30px;
+    width: 300px;
+    background-color: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    font-size: 1.1em;
-    min-width: 200px;
+    color: white;
+    font-family: 'Arvo', serif;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
 }
 
-.stats-container {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 30px;
+#seasonSelector:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+#seasonSelector:focus {
+    outline: none;
+    border-color: rgb(134, 159, 245);
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+#seasonSelector option {
+    background-color: black;
     color: white;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-top: 15px;
+/* Plotly specific overrides for dark theme */
+.js-plotly-plot .plotly .main-svg {
+    background-color: transparent !important;
 }
 
-.stats-grid div {
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 4px;
+.js-plotly-plot .plotly .gridlayer path {
+    stroke: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Make charts responsive */
-.recharts-wrapper {
-    margin: 0 auto;
+.js-plotly-plot .plotly .xlabel,
+.js-plotly-plot .plotly .ylabel,
+.js-plotly-plot .plotly .xtick text,
+.js-plotly-plot .plotly .ytick text {
+    fill: white !important;
 }
 
-/* Style tooltips */
-.recharts-tooltip-wrapper {
-    background: rgba(255, 255, 255, 0.9) !important;
-    border: 1px solid #cccccc !important;
-    color: #000000 !important;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
+.js-plotly-plot .plotly .legendtext {
+    fill: white !important;
+}
 
+.js-plotly-plot .plotly .legend rect {
+    fill: rgba(0, 0, 0, 0.8) !important;
+    stroke: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Responsive styles */
 @media screen and (max-width: 768px) {
     .container {
-        padding: 10px;
+        padding: 20px;
     }
-    
+
+    h1 {
+        font-size: 1.5em;
+        padding-top: 20px;
+    }
+
+    #seasonSelector {
+        width: 100%;
+        max-width: 300px;
+    }
+
     .chart-container {
+        margin: 1rem 0;
         padding: 10px;
-        margin-bottom: 20px;
-    }
-    
-    .stats-grid {
-        grid-template-columns: 1fr;
     }
 }

@@ -1,26 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Snow Data Visualization</title>
-    <!-- Load Plotly first -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mt. Washington Snow Data | Waterworks Labs</title>
+    
+    <!-- Fonts and Styles -->
+    <link href="https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="snow.css">
+    
+    <!-- Scripts -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <!-- Then PapaParse from a non-tracking CDN -->
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-    <style>
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .chart-container { margin: 2rem 0; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        #seasonSelector { padding: 10px; margin-bottom: 20px; width: 300px; }
-    </style>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="../pictures/favicon-2.png">
 </head>
 <body>
-    <div class="container">
-        <h1>Mt. Washington Snowfall</h1>
-        <select id="seasonSelector">
-            <option value="average">Average</option>
-        </select>
-        <div id="depthChart" class="chart-container"></div>
-        <div id="cumulativeChart" class="chart-container"></div>
-    </div>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <a href="../">
+                    <img src="../pictures/waterworks-logo-text.png" alt="Waterworks Labs">
+                </a>
+            </div>
+            <nav>
+                <button class="menu-toggle" aria-label="Toggle menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <ul class="nav-links">
+                    <li><a href="../#home">Home</a></li>
+                    <li><a href="../#services">Services</a></li>
+                    <li><a href="../#projects">Solutions</a></li>
+                    <li><a href="../#about">About</a></li>
+                    <li><a href="../#contact">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <h1>Mt. Washington Snowfall</h1>
+            <p class="description">
+                Interactive visualization of historical snow depth and accumulation data from Mount Washington, New Hampshire. 
+                Data sourced from NOAA's National Centers for Environmental Information.
+            </p>
+            
+            <div class="visualization-controls">
+                <select id="seasonSelector">
+                    <option value="average">Average</option>
+                </select>
+            </div>
+
+            <div id="depthChart" class="chart-container"></div>
+            <div id="cumulativeChart" class="chart-container"></div>
+
+            <div class="data-notes">
+                <p>
+                    Station: Mount Washington Observatory (USW00014755)<br>
+                    Period of Record: 1950-present<br>
+                    Snow season defined as August 1 through July 31
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Copyright © 2025 Waterworks Labs LLC. All Rights Reserved.</p>
+    </footer>
+
+    <!-- Scripts -->
     <script src="snow.js"></script>
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.menu-toggle').addEventListener('click', function() {
+            document.querySelector('.nav-links').classList.toggle('show');
+        });
+
+        // Close mobile menu when clicking a link
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', function() {
+                document.querySelector('.nav-links').classList.remove('show');
+            });
+        });
+    </script>
 </body>
 </html>
