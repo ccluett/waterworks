@@ -243,12 +243,13 @@ function updateHighlightedSeason(seasonName) {
         const existingTraces = chart.data;
         
         // Find if there's already a highlighted trace
-        const highlightedIndex = existingTraces.findIndex(trace => trace.name === 'Highlighted');
+        const highlightedIndex = existingTraces.findIndex(trace => 
+            trace.name !== 'Average' && trace.showlegend);
         
         const newTrace = {
             x: [...Array(365).keys()],
             y: isDepth ? season.depths : season.cumulative,
-            name: 'Highlighted',
+            name: season.name,  // Use the season name instead of 'Highlighted'
             line: { color: '#0066cc', width: 2 }
         };
 
@@ -260,6 +261,15 @@ function updateHighlightedSeason(seasonName) {
             // Add new highlighted trace
             Plotly.addTraces(chartId, newTrace);
         }
+
+        // Update the layout to ensure proper legend order
+        const updatedLayout = {
+            showlegend: true,
+            legend: {
+                traceorder: 'reversed'
+            }
+        };
+        Plotly.relayout(chartId, updatedLayout);
     });
 }
 
@@ -287,7 +297,8 @@ function populateSeasonSelector() {
             // Remove highlighted trace if it exists
             ['depthChart', 'cumulativeChart'].forEach(chartId => {
                 const chart = document.getElementById(chartId);
-                const highlightedIndex = chart.data.findIndex(trace => trace.name === 'Highlighted');
+                const highlightedIndex = chart.data.findIndex(trace => 
+                    trace.name !== 'Average' && trace.showlegend);
                 if (highlightedIndex >= 0) {
                     Plotly.deleteTraces(chartId, highlightedIndex);
                 }
