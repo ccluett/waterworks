@@ -646,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Create simulation
     const simulation = new FluidSimulation(canvas, {
         pxPerSquare: 2,
-        flowSpeed: 0.2,
+        flowSpeed: 0.225,
         flowAngleDeg: 0,
         viscosity: .3
     });
