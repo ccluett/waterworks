@@ -37,14 +37,23 @@ header {
   padding: 0 50px;
 }
 
+/* Updated logo styles for consistent scaling */
+.logo {
+  display: flex;
+  align-items: center;
+  height: 60px;
+}
+
 .logo a {
-  display: block;
-  line-height: 0;
+  display: flex;
+  align-items: center;
+  height: 100%;
 }
 
 .logo img {
   height: 60px;
   width: auto;
+  object-fit: contain;
 }
 
 nav ul {
@@ -135,7 +144,7 @@ section p {
   margin: auto;
   padding-right: 5vw;
   padding-left: 5vw;
-  position: relative; /* Added */
+  position: relative;
 }
 
 .home-content .home-image canvas {
@@ -243,126 +252,130 @@ footer {
 @media screen and (max-width: 768px) {
   /* Header */
   .header-content {
-      flex-wrap: nowrap;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 0;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+  }
+
+  .logo {
+    height: 50px;
   }
 
   .logo img {
-      height: 50px;
+    height: 50px;
   }
 
   /* Navigation */
   nav {
-      display: flex;
-      align-items: center;
+    display: flex;
+    align-items: center;
   }
 
   .menu-toggle {
-      display: block;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 10px;
-      margin-left: auto;
+    display: block;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 10px;
+    margin-left: auto;
   }
 
   .menu-toggle span {
-      display: block;
-      width: 25px;
-      height: 3px;
-      background-color: white;
-      margin: 5px 0;
-      transition: 0.4s;
+    display: block;
+    width: 25px;
+    height: 3px;
+    background-color: white;
+    margin: 5px 0;
+    transition: 0.4s;
   }
 
   .nav-links {
-      display: none;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      width: 100%;
-      background-color: black;
-      flex-direction: column;
-      align-items: center;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background-color: black;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
   }
 
   .nav-links.show {
-      display: flex;
+    display: flex;
   }
 
   nav ul li {
-      margin: 10px 0;
+    margin: 10px 0;
   }
 
   /* Home Section */
   .home-content {
-      flex-direction: column;
-      height: auto;
-      padding: 30px;
+    flex-direction: column;
+    height: auto;
+    padding: 30px;
   }
 
   .home-text {
-      padding: 60px 20px 20px;
+    padding: 60px 20px 20px;
   }
 
   .home-badge img {
-      width: 40vw;
-      max-width: 300px;
+    width: 40vw;
+    max-width: 300px;
   }
 
   .home-image {
-      flex-direction: column;
-      align-items: center;
-      position: relative;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
   }
 
   /* Projects Section */
   #projects .project-container {
-      flex-direction: column;
+    flex-direction: column;
   }
 
   #projects .project-logo {
-      width: 90%;
-      height: auto;
-      max-width: 400px;
-      margin-bottom: 0px;
+    width: 90%;
+    height: auto;
+    max-width: 400px;
+    margin-bottom: 0px;
   }
 
   #projects .project-description {
-      text-align: center;
+    text-align: center;
   }
 
   /* Simulation Controls */
   .simulation-controls {
-      position: absolute !important;
-      bottom: 10px !important;
-      right: 50% !important;
-      transform: translateX(50%) !important;
-      transition: opacity 0.3s ease;
-      opacity: 0;
-      visibility: hidden;
+    position: absolute !important;
+    bottom: 10px !important;
+    right: 50% !important;
+    transform: translateX(50%) !important;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+    visibility: hidden;
   }
 
   /* About Section */
   .about-image {
-      width: 90%;
-      max-width: 1200px;
+    width: 90%;
+    max-width: 1200px;
   }
 }
 
 @media screen and (min-width: 769px) {
   .menu-toggle {
-      display: none;
+    display: none;
   }
 
   .nav-links {
-      display: flex !important;
+    display: flex !important;
   }
 
   .home-content {
-      flex-direction: row;
+    flex-direction: row;
   }
 }
