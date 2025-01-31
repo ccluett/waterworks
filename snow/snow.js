@@ -229,42 +229,55 @@ function createLayout(title, yTitle, seasonStartYear) {
             title: {
                 text: 'Month',
                 font: {
-                    color: 'white'  // Make x-axis label white
+                    color: 'white'
                 }
             },
             tickfont: {
-                color: 'white'  // Make tick labels white
+                color: 'white'
             }
         },
         yaxis: { 
             title: {
                 text: yTitle,
                 font: {
-                    color: 'white'  // Make y-axis label white
+                    color: 'white'
                 }
             },
             tickfont: {
-                color: 'white'  // Make tick labels white
+                color: 'white'
             },
             hoverformat: '.1f',
-            gridcolor: 'rgba(255, 255, 255, 0.1)'  // Lighter grid lines
+            gridcolor: 'rgba(255, 255, 255, 0.1)'
         },
-        plot_bgcolor: 'rgba(0,0,0,0)',  // Transparent plot background
-        paper_bgcolor: 'rgba(0,0,0,0)',  // Transparent paper background
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
         hovermode: 'x unified',
         showlegend: true,
         legend: {
             font: {
-                color: 'white'  // Make legend text white
-            }
+                color: 'white',
+                size: 12
+            },
+            bgcolor: 'rgba(0,0,0,0.7)',
+            bordercolor: 'rgba(255,255,255,0.2)',
+            borderwidth: 1,
+            x: 0.02,           // Position from left
+            y: 0.98,           // Position from bottom
+            xanchor: 'left',   // Anchor point on legend
+            yanchor: 'top',    // Anchor point on legend
+            orientation: 'v'   // Vertical orientation
         },
-        margin: { t: 40, b: 60 },
+        margin: { 
+            t: 40,   // top margin
+            b: 60,   // bottom margin
+            l: 60,   // left margin
+            r: 10    // reduced right margin since legend is overlaid
+        },
         hoverlabel: {
             namelength: -1
         }
     };
 }
-
 // Update highlighted season
 function updateHighlightedSeason(seasonName) {
     const season = seasonsData.find(s => s.name === seasonName);
@@ -460,12 +473,12 @@ function calculateStatistics(rawData) {
     const avgMaxDepth = Object.values(seasonMaxDepths).reduce((a, b) => a + b, 0) / Object.values(seasonMaxDepths).length;
 
     // Update DOM with statistics
-    document.getElementById('averages').innerHTML = `
-        Average total snowfall: ${avgTotalSnow.toFixed(1)} inches<br>
-        Average max snow depth: ${avgMaxDepth.toFixed(1)} inches<br>
-        Maximum recorded depth: ${maxDepth.toFixed(1)} inches<br>
-        Maximum daily snowfall: ${maxDailySnowfall.toFixed(1)} inches
-    `;
+    // document.getElementById('averages').innerHTML = `
+    //     Average total snowfall: ${avgTotalSnow.toFixed(1)} inches<br>
+    //     Average max snow depth: ${avgMaxDepth.toFixed(1)} inches<br>
+    //     Maximum recorded depth: ${maxDepth.toFixed(1)} inches<br>
+    //     Maximum daily snowfall: ${maxDailySnowfall.toFixed(1)} inches
+    // `;
 
     // Update snowiest seasons table
     const tbody = document.getElementById('snowiest-table').getElementsByTagName('tbody')[0];
