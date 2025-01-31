@@ -391,13 +391,29 @@ function populateSeasonSelector() {
 
 // Calculate statistics
 function calculateStatistics(rawData) {
-    // Filter valid data
+    // Filter valid data first
     const validData = rawData.filter(row => 
         row.SNWD !== null && row.SNWD !== -9999 && 
         row.SNOW !== null && row.SNOW !== -9999
     );
 
-    // Calculate basic statistics
+    // Then find the most recent data date using the filtered validData
+    const validDates = validData
+        .map(row => new Date(row.DATE))
+        .sort((a, b) => b - a);  // Sort descending
+    
+    if (validDates.length > 0) {
+        const lastDate = validDates[0].toLocaleDateString('en-US', { 
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+        document.getElementById('lastDataDate').textContent = lastDate;
+    } else {
+        document.getElementById('lastDataDate').textContent = 'No data available';
+    }
+
+    // Continue with the rest of the statistics calculations
     const maxDepth = Math.max(...validData.map(row => row.SNWD)) / 25.4;  // Convert to inches
     const maxDailySnowfall = Math.max(...validData.map(row => row.SNOW)) / 25.4;  // Convert to inches
     
