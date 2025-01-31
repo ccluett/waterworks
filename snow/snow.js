@@ -10,9 +10,9 @@ let seasonsData = [];
 let averageData = { depths: [], cumulative: [] };
 let currentSeason = '';
 
-// Helper function to convert day index to date string
+// Convert day index to date string
 function getDayDate(dayIndex, seasonYear) {
-    const date = new Date(seasonYear, 7, 1); // Month is 0-based, so 7 is August
+    const date = new Date(seasonYear, 7, 1); // Month is 0-based
     date.setDate(date.getDate() + dayIndex);
     return date.toLocaleDateString('en-US', { 
         year: 'numeric',
@@ -51,7 +51,7 @@ async function fetchData() {
     }
 }
 
-// Interpolate snow depth values (matching MATLAB implementation)
+// Interpolate snow depth values
 function interpolateSnowDepth(depths) {
     // Create a copy of the input array
     depths = [...depths];
@@ -486,7 +486,7 @@ function calculateStatistics(rawData) {
         tbody.appendChild(tr);
     });
 
-    // If current season is not in top 5, add it at the bottom with ellipsis
+    // If current season is not in top 5, add it at the bottom
     if (currentSeasonData && currentSeasonData.rank > 5) {
         // Add ellipsis row
         const ellipsisRow = document.createElement('tr');
