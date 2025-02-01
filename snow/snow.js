@@ -1,7 +1,7 @@
 // Configuration and State
 const config = {
     station: 'USW00014755',
-    startDate: '1950-01-01',
+    startDate: '1948-08-01',
     endDate: new Date().toISOString().split('T')[0],
     dataTypes: 'SNOW,SNWD'
 };
