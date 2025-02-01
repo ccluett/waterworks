@@ -6,7 +6,7 @@ class FluidSimulation {
         this.ctx = canvas.getContext('2d');
         this.hasInitialized = false;
         this.options = options;
-        this.currentAngle = -0.436332; 
+        this.currentAngle = -0.261799; 
 
         // Dimensions
         this.width = canvas.width;
