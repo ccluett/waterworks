@@ -11,7 +11,7 @@ body, html {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px 50px;
+    padding: 5px 50px;
 }
 
 /* Header styles */
@@ -25,11 +25,11 @@ h1 {
 
 /* Chart container styles */
 .chart-container {
-    margin: 2rem 0;
+    margin: 1rem 0;
     background-color: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    padding: 20px;
+    padding: 10px;
     transition: background-color 0.3s ease;
 }
 
@@ -40,7 +40,7 @@ h1 {
 /* Season selector styles */
 #seasonSelector {
     padding: 12px;
-    margin-bottom: 30px;
+    margin-bottom: 5px;
     width: 300px;
     background-color: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
