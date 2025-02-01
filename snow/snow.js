@@ -212,7 +212,6 @@ function calculateAverage(arrays) {
     });
 }
 
-
 // Create layout for charts
 function createLayout(title, yTitle, seasonStartYear) {
     const year = seasonStartYear || new Date().getFullYear();
@@ -433,7 +432,13 @@ function calculateStatistics(rawData) {
     // Calculate season totals, ranks, and max depths
     const seasonTotals = {};
     const seasonMaxDepths = {};
+    const startYear = parseInt(config.startDate.split('-')[0]); // Get year from startDate
+
     seasonsData.forEach(season => {
+        // Skip seasons before our startDate year
+        const seasonStartYear = parseInt(season.name.split('-')[0]);
+        if (seasonStartYear < startYear) return;
+
         // Calculate total snowfall for the season
         let totalSnow = season.cumulative[season.cumulative.length - 1];
         
@@ -472,54 +477,65 @@ function calculateStatistics(rawData) {
     const avgTotalSnow = completedSeasons.reduce((a, [,b]) => a + b, 0) / completedSeasons.length;
     const avgMaxDepth = Object.values(seasonMaxDepths).reduce((a, b) => a + b, 0) / Object.values(seasonMaxDepths).length;
 
-    // Update DOM with statistics
-    // document.getElementById('averages').innerHTML = `
-    //     Average total snowfall: ${avgTotalSnow.toFixed(1)} inches<br>
-    //     Average max snow depth: ${avgMaxDepth.toFixed(1)} inches<br>
-    //     Maximum recorded depth: ${maxDepth.toFixed(1)} inches<br>
-    //     Maximum daily snowfall: ${maxDailySnowfall.toFixed(1)} inches
-    // `;
-
     // Update snowiest seasons table
     const tbody = document.getElementById('snowiest-table').getElementsByTagName('tbody')[0];
     tbody.innerHTML = '';
 
     // Get current season's rank and data
     const currentSeasonData = rankedSeasons.find(s => s.isCurrent);
+    const lastRankedSeason = rankedSeasons[rankedSeasons.length - 1];
     
-    // Display top 5 seasons
-    rankedSeasons.slice(0, 5).forEach((data) => {
+    // Determine which seasons to show
+    let seasonsToShow = [];
+    
+    // Always show top 5
+    seasonsToShow = rankedSeasons.slice(0, 5);
+
+    // Handle additional seasons display
+    if (currentSeasonData) {
+        if (currentSeasonData.rank <= 5) {
+            // Current season is in top 5
+            if (lastRankedSeason !== currentSeasonData) {
+                seasonsToShow.push({ isEllipsis: true });
+                seasonsToShow.push(lastRankedSeason);
+            }
+        } else {
+            // Current season is not in top 5
+            seasonsToShow.push({ isEllipsis: true }); // First ellipsis after top 5
+            seasonsToShow.push(currentSeasonData);
+            
+            // Add ellipsis between current and last season if they're not consecutive
+            if (currentSeasonData !== lastRankedSeason) {
+                seasonsToShow.push({ isEllipsis: true }); // Second ellipsis between current and last
+                seasonsToShow.push(lastRankedSeason);
+            }
+        }
+    } else if (!seasonsToShow.includes(lastRankedSeason)) {
+        // No current season, add last season if not already shown
+        seasonsToShow.push({ isEllipsis: true });
+        seasonsToShow.push(lastRankedSeason);
+    }
+
+    // Render the table
+    seasonsToShow.forEach((data) => {
         const tr = document.createElement('tr');
-        tr.className = data.season === currentSeason ? 'current-season' : '';
-        tr.innerHTML = `
-            <td>${data.rank}</td>
-            <td>${data.season}</td>
-            <td>${data.total.toFixed(1)}</td>
-        `;
+        
+        if (data.isEllipsis) {
+            tr.innerHTML = `
+                <td>...</td>
+                <td>...</td>
+                <td>...</td>
+            `;
+        } else {
+            tr.className = data.season === currentSeason ? 'current-season' : '';
+            tr.innerHTML = `
+                <td>${data.rank}</td>
+                <td>${data.season}</td>
+                <td>${data.total.toFixed(1)}</td>
+            `;
+        }
         tbody.appendChild(tr);
     });
-
-    // If current season is not in top 5, add it at the bottom
-    if (currentSeasonData && currentSeasonData.rank > 5) {
-        // Add ellipsis row
-        const ellipsisRow = document.createElement('tr');
-        ellipsisRow.innerHTML = `
-            <td>...</td>
-            <td>...</td>
-            <td>...</td>
-        `;
-        tbody.appendChild(ellipsisRow);
-
-        // Add current season
-        const currentRow = document.createElement('tr');
-        currentRow.className = 'current-season';
-        currentRow.innerHTML = `
-            <td>${currentSeasonData.rank}</td>
-            <td>${currentSeasonData.season}</td>
-            <td>${currentSeasonData.total.toFixed(1)}</td>
-        `;
-        tbody.appendChild(currentRow);
-    }
 }
 
 // Main initialization
