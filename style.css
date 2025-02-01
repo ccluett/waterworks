@@ -310,27 +310,32 @@ footer {
     margin: 10px 0;
   }
 
-  /* Home Section */
-  .home-content {
-    flex-direction: column;
-    height: auto;
-    padding: 30px;
-  }
+/* Home Section */
+.home-content {
+  flex-direction: column;
+  height: auto;
+  padding: 0; /* Remove vertical padding */
+  padding-left: 10px; /* Small horizontal padding */
+  padding-right: 10px;
+  background-color: black;
+}
 
-  .home-text {
-    padding: 60px 20px 20px;
-  }
+.home-text {
+  padding: 60px 20px 20px;
+}
 
-  .home-badge img {
-    width: 40vw;
-    max-width: 300px;
-  }
+.home-badge img {
+  width: 40vw;
+  max-width: 300px;
+}
 
-  .home-image {
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-  }
+.home-image {
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 0; /* Remove any inherited padding */
+  width: 100%; /* Ensure it takes full width of its container */
+}
 
   /* Projects Section */
   #projects .project-container {
