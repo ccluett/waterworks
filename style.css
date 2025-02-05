@@ -248,6 +248,7 @@ footer {
   font-size: 0.9em;
 }
 
+
 /* Responsive Styles */
 @media screen and (max-width: 768px) {
   /* Header */
@@ -310,32 +311,47 @@ footer {
     margin: 10px 0;
   }
 
-/* Home Section */
-.home-content {
-  flex-direction: column;
-  height: auto;
-  padding: 0; /* Remove vertical padding */
-  padding-left: 10px; /* Small horizontal padding */
-  padding-right: 10px;
-  background-color: black;
-}
+  /* Home Section */
+  .home-content {
+    flex-direction: column;
+    height: auto;
+    padding: 0; /* Remove vertical padding */
+    padding-left: 10px; /* Small horizontal padding */
+    padding-right: 10px;
+    background-color: black;
+  }
 
-.home-text {
-  padding: 60px 20px 20px;
-}
+  .home-text {
+    padding: 60px 20px 20px;
+  }
 
-.home-badge img {
-  width: 40vw;
-  max-width: 300px;
-}
+  .home-badge img {
+    width: 40vw;
+    max-width: 300px;
+  }
 
-.home-image {
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  padding: 0; /* Remove any inherited padding */
-  width: 100%; /* Ensure it takes full width of its container */
-}
+  /* .home-image {
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 0; 
+    width: 100%; Ensure it takes full width of its container
+  } */
+
+  .home-image {
+    position: relative;
+    padding: 0;
+    width: 100%;
+    max-width: 100vw; /* Prevent extending beyond viewport width */
+    overflow-x: hidden; /* Hide horizontal overflow */
+  }
+
+  .home-image canvas {
+    width: 100% !important; /* Override any inline styles */
+    max-width: 100vw;
+    left: 0;
+    right: 0;
+  }
 
   /* Projects Section */
   #projects .project-container {
