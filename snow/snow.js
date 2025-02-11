@@ -277,6 +277,7 @@ function createLayout(title, yTitle, seasonStartYear) {
         }
     };
 }
+
 // Update highlighted season
 function updateHighlightedSeason(seasonName) {
     const season = seasonsData.find(s => s.name === seasonName);
@@ -290,9 +291,9 @@ function updateHighlightedSeason(seasonName) {
         const [seasonStartYear] = season.name.split('-').map(Number);
         const customdata = Array.from({length: 365}, (_, i) => getDayDate(i, seasonStartYear));
 
-        // Add background traces first
+        // Add background traces first (excluding current season and selected season)
         seasonsData.forEach(s => {
-            if (!s.isCurrent) {
+            if (!s.isCurrent && s.name !== seasonName) {
                 traces.push({
                     x: [...Array(365).keys()],
                     y: isDepth ? s.depths : s.cumulative,
@@ -310,17 +311,30 @@ function updateHighlightedSeason(seasonName) {
             y: isDepth ? averageData.depths : averageData.cumulative,
             customdata: customdata,
             name: 'Average',
-            line: { color: '#FFFFFF', width: 2 },  // Changed to red
+            line: { color: '#FFFFFF', width: 2 },
             hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
         });
+
+        // Add current season trace if it's not the selected season
+        const currentSeasonData = seasonsData.find(s => s.isCurrent);
+        if (currentSeasonData && currentSeasonData.name !== seasonName) {
+            traces.push({
+                x: [...Array(365).keys()],
+                y: isDepth ? currentSeasonData.depths : currentSeasonData.cumulative,
+                customdata: customdata,
+                name: `${currentSeasonData.name}`,
+                line: { color: 'rgba(49, 247, 138, 0.38)', width: 3 }, 
+                hovertemplate: `%{customdata}<br>${currentSeasonData.name} : %{y:.1f}<extra></extra>`
+            });
+        }
 
         // Add selected season trace
         traces.push({
             x: [...Array(365).keys()],
             y: isDepth ? season.depths : season.cumulative,
             customdata: customdata,
-            name: season.name,
-            line: { color: '#3177f7', width: 3 },  // Changed to bright blue
+            name: season.name + (season.isCurrent ? '' : ''),
+            line: { color: '#3177f7', width: 3 }, 
             hovertemplate: `%{customdata}<br>${season.name} : %{y:.1f}<extra></extra>`
         });
 
