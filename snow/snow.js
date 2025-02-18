@@ -21,7 +21,7 @@ function getDayDate(dayIndex, seasonYear) {
     });
 }
 
-// Data Fetching Function
+// Data Fetching
 async function fetchData() {
     const url = new URL('https://www.ncei.noaa.gov/access/services/data/v1');
     url.searchParams.set('dataset', 'daily-summaries');
@@ -31,23 +31,54 @@ async function fetchData() {
     url.searchParams.set('endDate', config.endDate);
     url.searchParams.set('format', 'csv');
 
+    // Create an abort controller for timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const response = await fetch(url, {
+            signal: controller.signal,
+            cache: 'no-cache' // Ensure fresh data
+        });
+        
+        clearTimeout(timeout);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const text = await response.text();
         
-        return new Promise((resolve) => {
-            Papa.parse(text, {
-                header: true,
-                dynamicTyping: true,
-                complete: (results) => {
-                    resolve(results.data.filter(row => row.DATE));
-                }
-            });
-        });
+        // Use Promise.race to handle parsing timeout
+        return await Promise.race([
+            new Promise((resolve) => {
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    complete: (results) => {
+                        resolve(results.data.filter(row => row.DATE));
+                    },
+                    error: (error) => {
+                        console.error('CSV parsing error:', error);
+                        resolve([]);
+                    }
+                });
+            }),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('CSV parsing timeout')), 10000)
+            )
+        ]);
     } catch (error) {
         console.error('Data fetch failed:', error);
+        // Check if we have cached data
+        const cachedData = localStorage.getItem('snowData');
+        if (cachedData) {
+            console.log('Using cached data');
+            return JSON.parse(cachedData);
+        }
         return [];
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -118,6 +149,15 @@ function processSeasons(rawData) {
         snowfall: row.SNOW === -9999 || row.SNOW === null ? 0 : row.SNOW / 25.4   // Missing snowfall treated as 0
     })).filter(row => row.date && !isNaN(row.date.getTime()));
 
+    // Sort data chronologically
+    cleanData.sort((a, b) => a.date - b.date);
+
+    // Get the first actual data point date
+    const firstDataDate = cleanData[0].date;
+    const firstValidSeasonYear = firstDataDate.getMonth() >= 7 ? 
+        firstDataDate.getFullYear() : 
+        firstDataDate.getFullYear() - 1;
+
     // Determine current season
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
@@ -132,25 +172,29 @@ function processSeasons(rawData) {
         const year = row.date.getMonth() >= 7 ? 
             row.date.getFullYear() : 
             row.date.getFullYear() - 1;
-        const seasonKey = `${year}-${year + 1}`;
         
-        if (!seasons[seasonKey]) {
-            seasons[seasonKey] = {
-                depths: new Array(365).fill(null),
-                cumulative: new Array(365).fill(0),  // Initialize cumulative to 0
-                dates: new Array(365).fill(null),
-                isCurrent: seasonKey === currentSeason
-            };
-        }
+        // Only process data for valid seasons (starting from firstValidSeasonYear)
+        if (year >= firstValidSeasonYear) {
+            const seasonKey = `${year}-${year + 1}`;
+            
+            if (!seasons[seasonKey]) {
+                seasons[seasonKey] = {
+                    depths: new Array(365).fill(null),
+                    cumulative: new Array(365).fill(0),
+                    dates: new Array(365).fill(null),
+                    isCurrent: seasonKey === currentSeason
+                };
+            }
 
-        // Calculate day index (Aug 1 = 0)
-        const seasonStart = new Date(year, 7, 1); // August 1st
-        const dayIndex = Math.floor((row.date - seasonStart) / (24 * 60 * 60 * 1000));
-        
-        if (dayIndex >= 0 && dayIndex < 365) {
-            seasons[seasonKey].depths[dayIndex] = row.depth;
-            seasons[seasonKey].cumulative[dayIndex] = row.snowfall;
-            seasons[seasonKey].dates[dayIndex] = row.date;
+            // Calculate day index (Aug 1 = 0)
+            const seasonStart = new Date(year, 7, 1); // August 1st
+            const dayIndex = Math.floor((row.date - seasonStart) / (24 * 60 * 60 * 1000));
+            
+            if (dayIndex >= 0 && dayIndex < 365) {
+                seasons[seasonKey].depths[dayIndex] = row.depth;
+                seasons[seasonKey].cumulative[dayIndex] = row.snowfall;
+                seasons[seasonKey].dates[dayIndex] = row.date;
+            }
         }
     });
 
@@ -181,7 +225,7 @@ function processSeasons(rawData) {
             if (data.isCurrent && idx > lastValidIndex) {
                 return null;  // Only use null after the last valid date for current season
             }
-            cumulativeSnow += dailySnow;  // dailySnow is already 0 if it was missing
+            cumulativeSnow += dailySnow;
             return cumulativeSnow;
         });
 
@@ -189,15 +233,15 @@ function processSeasons(rawData) {
             name: season,
             depths: interpolatedDepths,
             cumulative: cumulative,
-            isCurrent: data.isCurrent
+            isCurrent: data.isCurrent,
+            hasData: interpolatedDepths.some(d => d !== null) || cumulative.some(c => c > 0)
         };
-    });
+    })
+    .filter(season => season.hasData) // Remove seasons with no actual data
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Sort seasons chronologically
-    seasonsData.sort((a, b) => a.name.localeCompare(b.name));
-
-    // Calculate averages (excluding current season)
-    const validSeasons = seasonsData.filter(s => !s.isCurrent);
+    // Calculate averages (excluding current season and ensuring we have valid data)
+    const validSeasons = seasonsData.filter(s => !s.isCurrent && s.hasData);
     averageData = {
         depths: calculateAverage(validSeasons.map(s => s.depths)),
         cumulative: calculateAverage(validSeasons.map(s => s.cumulative))
@@ -375,7 +419,7 @@ function createBaseCharts() {
             y: isDepth ? averageData.depths : averageData.cumulative,
             customdata: customdata,
             name: 'Average',
-            line: { color: '#FF0000', width: 3 },  // Changed to red
+            line: { color: '#FFFFFF', width: 2 },
             hovertemplate: '%{customdata}<br>Average : %{y:.1f}<extra></extra>'
         });
 
@@ -552,22 +596,62 @@ function calculateStatistics(rawData) {
     });
 }
 
-// Main initialization
 (async function init() {
     try {
-        const rawData = await fetchData();
-        processSeasons(rawData);
-        calculateStatistics(rawData);        
-        createBaseCharts();
-        populateSeasonSelector();
+        // Show loading state
+        document.getElementById('lastDataDate').textContent = 'Loading data...';
         
-        // Initialize with the most recent season
-        if (seasonsData.length > 0) {
-            const selector = document.getElementById('seasonSelector');
-            selector.value = seasonsData[seasonsData.length - 1].name;
-            updateHighlightedSeason(seasonsData[seasonsData.length - 1].name);
+        // Try to get cached data first
+        let rawData = null;
+        try {
+            const cachedData = localStorage.getItem('snowData');
+            if (cachedData) {
+                const cached = JSON.parse(cachedData);
+                const cacheDate = localStorage.getItem('snowDataTimestamp');
+                
+                // Only use cache if it's less than 24 hours old
+                if (cacheDate && (Date.now() - parseInt(cacheDate)) < 24 * 60 * 60 * 1000) {
+                    rawData = cached;
+                    console.log('Using cached data');
+                }
+            }
+        } catch (e) {
+            console.warn('Error reading cache:', e);
+        }
+
+        // If no valid cached data, fetch new data
+        if (!rawData) {
+            rawData = await fetchData();
+            
+            // Cache the new data if valid
+            if (rawData && rawData.length > 0) {
+                try {
+                    localStorage.setItem('snowData', JSON.stringify(rawData));
+                    localStorage.setItem('snowDataTimestamp', Date.now().toString());
+                } catch (e) {
+                    console.warn('Error caching data:', e);
+                }
+            }
+        }
+
+        // Process and display the data
+        if (rawData && rawData.length > 0) {
+            processSeasons(rawData);
+            calculateStatistics(rawData);        
+            createBaseCharts();
+            populateSeasonSelector();
+            
+            // Initialize with the most recent season
+            if (seasonsData.length > 0) {
+                const selector = document.getElementById('seasonSelector');
+                selector.value = seasonsData[seasonsData.length - 1].name;
+                updateHighlightedSeason(seasonsData[seasonsData.length - 1].name);
+            }
+        } else {
+            throw new Error('No data available');
         }
     } catch (error) {
         console.error('Initialization failed:', error);
+        document.getElementById('lastDataDate').textContent = 'Error loading data. Please refresh the page.';
     }
 })();
