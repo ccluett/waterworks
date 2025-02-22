@@ -12,12 +12,13 @@
         #project {
             background-color: black;
             color: white;
+            padding-top: 20px; /* Reduced top padding */
         }
         
         .project-content {
             max-width: 1000px;
             margin: 0 auto;
-            padding: 50px 20px;
+            padding: 20px 20px; /* Reduced top padding */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -40,35 +41,54 @@
             font-size: 1.2em;
             line-height: 1.6;
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 30px;
             max-width: 800px;
         }
         
-        .project-logo {
-            margin-bottom: 40px;
+        .project-title {
+            margin-bottom: 10px;
             text-align: center;
         }
         
-        .project-logo img {
-            max-width: 400px;
+        .project-title h1 {
+            font-size: 2em;
+            line-height: 1.4;
+            font-weight: 700;
+            text-transform: lowercase;
+        }
+        
+        .tech-logos {
+            display: flex;
+            justify-content: center;
+            align-items: end; 
+            flex-wrap: wrap;
+            gap: 40px;
+            margin-bottom: 40px;
             width: 100%;
-            height: auto;
         }
         
         .tech-logo {
-            margin-bottom: 40px;
             text-align: center;
+            display: flex;
+            align-items: end; 
+            justify-content: center;
         }
         
         .tech-logo img {
             max-width: 300px;
-            width: 80%;
+            width: 100%;
             height: auto;
+            object-position: center; /* Ensures the image content is centered */
+        }
+        
+        /* Adjust header spacing for this page */
+        header {
+            margin-bottom: 0;
         }
         
         @media screen and (max-width: 768px) {
-            .project-logo img {
-                max-width: 300px;
+            .project-title h1 {
+                font-size: 1.8em;
             }
             
             .project-description {
@@ -77,6 +97,10 @@
             
             .tech-logo img {
                 max-width: 200px;
+            }
+            
+            .tech-logos {
+                gap: 20px;
             }
         }
     </style>
@@ -88,31 +112,14 @@
                 <a href="../#home">
                     <img src="../pictures/waterworks-logo-text.png" alt="Waterworks Labs">
                 </a>
-            </div>
-            <nav>
-                <button class="menu-toggle" aria-label="Toggle menu">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </button>
-                <ul class="nav-links">
-                  <li><a href="../#home">Home</a></li>                  
-                  <li><a href="../#about">About</a></li>
-                  <li><a href="../#projects">Projects</a></li>
-                  <li><a href="../#services">Services</a></li>
-                  <li><a href="../#contact">Contact</a></li>
-                </ul>
-              </nav>
+            </div>            
         </div>
     </header>
     <main>
         <section id="project">
             <div class="project-content">
-                <div class="project-logo">
-                    <img src="../pictures/poseidon-logo-text.png" alt="Poseidon">
-                </div>
-                <div class="project-image">
-                    <img src="../pictures/poseidon-toroid.PNG" alt="Poseidon Toroid">
+                <div class="project-title">
+                    <h1>poseidon</h1>
                 </div>
                 <div class="project-description">
                     <p>
@@ -121,12 +128,17 @@
                         built on open-source solvers.
                     </p>
                 </div>
-                <div class="tech-logo">
-                    <img src="../pictures/OpenFOAM_logo.png" alt="OpenFOAM Logo">
-                </div>
-                <div class="back-link">
-                    <a href="../#projects">Back to Projects</a>
-                </div>
+                <div class="project-image">
+                    <img src="../pictures/poseidon-toroid.png" alt="Poseidon Toroid">
+                </div>                
+                <div class="tech-logos">
+                    <div class="tech-logo">
+                        <img src="../pictures/openfoam-logo.png" alt="OpenFOAM Logo">
+                    </div>
+                    <div class="tech-logo">
+                        <img src="../pictures/aster-logo.png" alt="Code_Aster Logo">
+                    </div>
+                </div>                
             </div>
         </section>
     </main>
@@ -134,18 +146,5 @@
     <footer>
         <p>Copyright © 2025 Waterworks Labs LLC. All Rights Reserved.</p>
     </footer>
-
-    <script>
-        document.querySelector('.menu-toggle').addEventListener('click', function() {
-            document.querySelector('.nav-links').classList.toggle('show');
-        });
-
-        // Close the menu after clicking a link
-        document.querySelectorAll('.nav-links a').forEach(link => {
-            link.addEventListener('click', function() {
-                document.querySelector('.nav-links').classList.remove('show');
-            });
-        });
-    </script>
 </body>
 </html>
