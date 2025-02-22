@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poseidon - Waterworks Labs LLC</title>
+    <link href="https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="icon" href="../pictures/favicon-2.png">
+    <style>
+        /* Additional styles specific to Poseidon page */
+        #project {
+            background-color: black;
+            color: white;
+        }
+        
+        .project-content {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 50px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .project-image {
+            margin-bottom: 40px;
+            text-align: center;
+            width: 100%;
+        }
+        
+        .project-image img {
+            max-width: 800px;
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+        
+        .project-description {
+            font-size: 1.2em;
+            line-height: 1.6;
+            text-align: center;
+            margin-bottom: 40px;
+            max-width: 800px;
+        }
+        
+        .project-logo {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        .project-logo img {
+            max-width: 400px;
+            width: 100%;
+            height: auto;
+        }
+        
+        .tech-logo {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        .tech-logo img {
+            max-width: 300px;
+            width: 80%;
+            height: auto;
+        }
+        
+        @media screen and (max-width: 768px) {
+            .project-logo img {
+                max-width: 300px;
+            }
+            
+            .project-description {
+                font-size: 1em;
+            }
+            
+            .tech-logo img {
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <a href="../#home">
+                    <img src="../pictures/waterworks-logo-text.png" alt="Waterworks Labs">
+                </a>
+            </div>
+            <nav>
+                <button class="menu-toggle" aria-label="Toggle menu">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </button>
+                <ul class="nav-links">
+                  <li><a href="../#home">Home</a></li>                  
+                  <li><a href="../#about">About</a></li>
+                  <li><a href="../#projects">Projects</a></li>
+                  <li><a href="../#services">Services</a></li>
+                  <li><a href="../#contact">Contact</a></li>
+                </ul>
+              </nav>
+        </div>
+    </header>
+    <main>
+        <section id="project">
+            <div class="project-content">
+                <div class="project-logo">
+                    <img src="../pictures/poseidon-logo-text.png" alt="Poseidon">
+                </div>
+                <div class="project-image">
+                    <img src="../pictures/poseidon-toroid.PNG" alt="Poseidon Toroid">
+                </div>
+                <div class="project-description">
+                    <p>
+                        An internally developed (and continually developing) integrated generative design, 
+                        hydrodynamic analysis, and optimization toolset for maritime systems, 
+                        built on open-source solvers.
+                    </p>
+                </div>
+                <div class="tech-logo">
+                    <img src="../pictures/OpenFOAM_logo.png" alt="OpenFOAM Logo">
+                </div>
+                <div class="back-link">
+                    <a href="../#projects">Back to Projects</a>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <footer>
+        <p>Copyright © 2025 Waterworks Labs LLC. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        document.querySelector('.menu-toggle').addEventListener('click', function() {
+            document.querySelector('.nav-links').classList.toggle('show');
+        });
+
+        // Close the menu after clicking a link
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', function() {
+                document.querySelector('.nav-links').classList.remove('show');
+            });
+        });
+    </script>
+</body>
+</html>
