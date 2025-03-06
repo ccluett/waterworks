@@ -153,6 +153,7 @@ section p {
   position: absolute;
   top: 0;
   left: 0;
+  border-radius: 12px;
 }
 
 /* Services Section */
