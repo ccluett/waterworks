@@ -325,8 +325,9 @@ footer {
   }
 
   .home-badge img {
-    width: 40vw;
+    width: 50vw;
     max-width: 300px;
+    padding-top: 50px;
   }
 
   /* .home-image {
