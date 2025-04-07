@@ -1,4 +1,4 @@
-// fluidSimulation.js  //
+// fluidSimulation.js //
 
 class FluidSimulation {
     constructor(canvas, options = {}) {
@@ -23,10 +23,24 @@ class FluidSimulation {
         this.one36th = 1.0 / 36.0;
 
         // Simulation parameters
-        this.flowSpeed = options.flowSpeed || 0.2;
+        this.flowSpeed = options.flowSpeed || 0.3;
         this.flowAngle = (options.flowAngleDeg || 0) * Math.PI / 180;
         this.viscosity = options.viscosity || 0.01;
         this.running = false;
+        
+        // Airfoil parameters
+        this.airfoilCamber = 0.05;
+        this.airfoilThickness = 0.22;
+        
+        // Stability parameters
+        this.maxAllowedSpeed = 0.5; 
+        this.minAllowedDensity = 0.1;
+        this.stabilityCorrections = 0;
+        
+        // Diagnostic variables
+        this.maxSpeed = 0;
+        this.minDensity = 1.0;
+        this.reynoldsNumber = 0;
 
         // Arrays
         this.initArrays();
@@ -38,9 +52,7 @@ class FluidSimulation {
         }
 
         // Initialize color map
-        if (!this.colors) {
-            this.initColors();
-        }
+        this.initColors();
 
         // 1) Initialize domain at rest
         this.initFluid();
@@ -48,8 +60,10 @@ class FluidSimulation {
         // 2) Add the airfoil barrier (polygon fill)
         this.addNACABarrier({
             chordFraction: 1/3,
-            thickness: 0.12,
-            angle: this.currentAngle
+            thickness: this.airfoilThickness,
+            angle: this.currentAngle,
+            camber: this.airfoilCamber,
+            camberPos: 0.4
         });
 
         // 3) Start simulation
@@ -76,7 +90,10 @@ class FluidSimulation {
         this.curl = new Float32Array(size);  
 
         this.speed = new Float32Array(size);
-
+        
+        // Boundary distance field for interpolated bounce-back
+        this.distanceField = new Float32Array(size);
+        
         this.barriers = new Uint8Array(size);
     }
 
@@ -96,6 +113,11 @@ class FluidSimulation {
         for (let i = 0; i < this.curl.length; i++) {
             this.curl[i] = 0.0;
         }
+        
+        // Initialize distance field with maximum value
+        for (let i = 0; i < this.distanceField.length; i++) {
+            this.distanceField[i] = 1.0;
+        }
 
         // Zero out any velocities in barrier cells
         this._zeroOutBarrierCells();
@@ -107,36 +129,52 @@ class FluidSimulation {
         this.initFluid();
         this.addNACABarrier({
             chordFraction: 1/3.5,
-            thickness: 0.12,
-            angle: this.currentAngle
+            thickness: this.airfoilThickness,
+            angle: this.currentAngle,
+            camber: this.airfoilCamber,
+            camberPos: 0.4
         });
+        
+        // Reset diagnostic values
+        this.stabilityCorrections = 0;
+        this.maxSpeed = 0;
+        this.minDensity = 1.0;
     }
 
+    // Classic rainbow CFD colormap with tighter high-speed range
     initColors() {
-        this.nColors = 400;
+        this.nColors = 80;
         this.colors = new Array(this.nColors);
+        
+        // Standard rainbow spectrum for CFD visualization
+        // Adjusted to reserve red only for highest speeds
         for (let i = 0; i < this.nColors; i++) {
             const phase = i / this.nColors;
             let r, g, b;
 
-            if (phase < 0.125) {
-                r = 0; g = 0;
-                b = Math.round(255 * (phase + 0.125) / 0.25);
-            } else if (phase < 0.375) {
+            if (phase < 0.15) {              
                 r = 0;
-                g = Math.round(255 * (phase - 0.125) / 0.25);
+                g = 0;
+                b = 128 + Math.round(127 * (phase / 0.15));
+            } else if (phase < 0.3) {                
+                r = 0;
+                g = Math.round(255 * ((phase - 0.15) / 0.15));
                 b = 255;
-            } else if (phase < 0.625) {
-                r = Math.round(255 * (phase - 0.375) / 0.25);
+            } else if (phase < 0.55) {                
+                r = 0;
                 g = 255;
-                b = 255 - r;
-            } else if (phase < 0.875) {
-                r = 255;
-                g = Math.round(255 * (0.875 - phase) / 0.25);
+                b = 255 - Math.round(255 * ((phase - 0.3) / 0.25));
+            } else if (phase < 0.75) {                
+                r = Math.round(255 * ((phase - 0.55) / 0.2));
+                g = 255;
                 b = 0;
-            } else {
-                r = Math.round(255 * (1.125 - phase) / 0.25);
-                g = 0; 
+            } else if (phase < 0.92) {                
+                r = 255;
+                g = 255 - Math.round(195 * ((phase - 0.75) / 0.17));
+                b = 0;
+            } else {                
+                r = 255;
+                g = 60 - Math.round(60 * ((phase - 0.92) / 0.08));
                 b = 0;
             }
             this.colors[i] = { r, g, b };
@@ -176,13 +214,39 @@ class FluidSimulation {
 
      //  AIRFOIL GENERATION  // 
 
-    addNACABarrier({ chordFraction = 1/3, thickness = 0.12, angle = 0 }) {
+    //  NACA airfoil generation
+    addNACABarrier({ chordFraction = 1/3, thickness = 0.12, angle = 0, camber = 0.02, camberPos = 0.4 }) {
         const chordLength = Math.floor(this.xdim * chordFraction);
+        // Position airfoil further upstream for better visualization of wake
         const centerX = Math.floor(this.xdim / 3);
         const centerY = Math.floor(this.ydim / 2);
+        
+        // Higher resolution sampling along chord
+        const numPoints = Math.max(80, chordLength * 2);
+
+        // NACA camber line function (for 4-digit NACA airfoils)
+        const nacaCamber = (xFrac) => {
+            if (xFrac <= camberPos) {
+                return camber * (xFrac / camberPos**2) * (2 * camberPos - xFrac);
+            } else {
+                return camber * ((1 - xFrac) / (1 - camberPos)**2) * (1 + xFrac - 2 * camberPos);
+            }
+        };
+        
+        // NACA camber angle (dyc/dx)
+        const nacaCamberSlope = (xFrac) => {
+            if (xFrac <= camberPos) {
+                return (2 * camber / camberPos**2) * (camberPos - xFrac);
+            } else {
+                return (2 * camber / (1 - camberPos)**2) * (camberPos - xFrac);
+            }
+        };
 
         // NACA thickness function
         const nacaThickness = (xFrac) => {
+            // Avoid singularity at trailing edge
+            if (xFrac > 0.9999) xFrac = 0.9999;
+            
             return (thickness / 0.2) * chordLength * (
                 0.2969 * Math.sqrt(xFrac) -
                 0.1260 * xFrac -
@@ -192,50 +256,66 @@ class FluidSimulation {
             );
         };
 
-        // 1) Generate top/bottom edges
-        const { topPoints, botPoints } = this._generateAirfoilPoints(
-            chordLength, centerX, centerY, angle, nacaThickness
-        );
-
-        // 2) Build a closed polygon
-        const polygon = this._buildAirfoilPolygon(topPoints, botPoints);
-
-        // 3) Fill polygon into this.barriers
-        this._fillPolygon(polygon, this.barriers);
-
-        // 4) Zero out fluid in all barrier cells
-        this._zeroOutBarrierCells();
-    }
-
-     // Generate top & bottom edge points for chord slices
-    _generateAirfoilPoints(chordLength, centerX, centerY, angle, thicknessFunc) {
-        const cosAng = Math.cos(angle);
-        const sinAng = Math.sin(angle);
-
+        // Generate points with higher precision
         const topPoints = [];
         const botPoints = [];
-
-        for (let i = 0; i <= chordLength; i++) {
-            const xFrac = i / chordLength;
-            const halfThick = thicknessFunc(xFrac);
-
-            // mid-chord point
-            const xMid = centerX + i * cosAng;
-            const yMid = centerY + i * sinAng;
-
-            // offset top & bottom
-            const xTop = Math.round(xMid - halfThick * sinAng);
-            const yTop = Math.round(yMid + halfThick * cosAng);
-            const xBot = Math.round(xMid + halfThick * sinAng);
-            const yBot = Math.round(yMid - halfThick * cosAng);
-
+        
+        for (let i = 0; i <= numPoints; i++) {
+            const xFrac = i / numPoints;
+            const xC = xFrac * chordLength;
+            
+            // Calculate camber and thickness at this position
+            const yc = nacaCamber(xFrac) * chordLength;
+            const yt = nacaThickness(xFrac) / 2;
+            const theta = Math.atan(nacaCamberSlope(xFrac));
+            
+            // Calculate upper and lower surface points
+            const xu = xC - yt * Math.sin(theta);
+            const yu = yc + yt * Math.cos(theta);
+            
+            const xl = xC + yt * Math.sin(theta);
+            const yl = yc - yt * Math.cos(theta);
+            
+            // Apply rotation and translation
+            const cosAng = Math.cos(angle);
+            const sinAng = Math.sin(angle);
+            
+            // Top surface point (rotated and translated)
+            const xTop = Math.round(centerX + xu * cosAng - yu * sinAng);
+            const yTop = Math.round(centerY + xu * sinAng + yu * cosAng);
+            
+            // Bottom surface point (rotated and translated)
+            const xBot = Math.round(centerX + xl * cosAng - yl * sinAng);
+            const yBot = Math.round(centerY + xl * sinAng + yl * cosAng);
+            
             topPoints.push({ x: xTop, y: yTop });
             botPoints.push({ x: xBot, y: yBot });
         }
+        
+        // Ensure sharp trailing edge
+        const lastTop = topPoints[topPoints.length - 1];
+        const lastBot = botPoints[botPoints.length - 1];
+        
+        // Force exact same trailing edge point
+        const trailingX = Math.round((lastTop.x + lastBot.x) / 2);
+        const trailingY = Math.round((lastTop.y + lastBot.y) / 2);
+        
+        topPoints[topPoints.length - 1] = { x: trailingX, y: trailingY };
+        botPoints[botPoints.length - 1] = { x: trailingX, y: trailingY };
 
-        return { topPoints, botPoints };
+        // Build a closed polygon
+        const polygon = this._buildAirfoilPolygon(topPoints, botPoints);
+
+        // Fill polygon into this.barriers
+        this._fillPolygon(polygon, this.barriers);
+        
+        // Generate distance field for interpolated bounce-back
+        this._generateDistanceField(polygon);
+
+        // Zero out fluid in all barrier cells
+        this._zeroOutBarrierCells();
     }
-
+     
      // Create a single closed polygon from top & bottom edges
     _buildAirfoilPolygon(topPoints, botPoints) {
         // Reverse the bottom array so we get a continuous loop
@@ -244,7 +324,6 @@ class FluidSimulation {
         const polygon = topPoints.concat(reversedBot);
         return polygon;
     }
-
     
      // Fill the polygon via a simple scan-line approach
     _fillPolygon(polygon, barrierArray) {
@@ -285,6 +364,85 @@ class FluidSimulation {
                 }
             }
         }
+    }
+    
+    // Generate distance field for interpolated bounce-back
+    _generateDistanceField(polygon) {
+        // Calculate distance from each fluid cell to the nearest boundary
+        const distanceThreshold = 3; // Only compute precise distance for cells near boundaries
+        
+        // First, mark cells adjacent to barriers
+        for (let y = 1; y < this.ydim - 1; y++) {
+            for (let x = 1; x < this.xdim - 1; x++) {
+                const i = x + y * this.xdim;
+                
+                if (!this.barriers[i]) {
+                    // Check all 8 neighbors
+                    for (let ny = y-1; ny <= y+1; ny++) {
+                        for (let nx = x-1; nx <= x+1; nx++) {
+                            if (nx >= 0 && nx < this.xdim && ny >= 0 && ny < this.ydim) {
+                                const ni = nx + ny * this.xdim;
+                                if (this.barriers[ni]) {
+                                    // Find precise distance to polygon
+                                    let minDist = distanceThreshold;
+                                    
+                                    // For nearby cells, compute precise distance to boundary
+                                    for (let j = 0; j < polygon.length; j++) {
+                                        const p1 = polygon[j];
+                                        const p2 = polygon[(j+1) % polygon.length];
+                                        
+                                        // Distance to line segment
+                                        const dist = this._distanceToLineSegment(x, y, p1.x, p1.y, p2.x, p2.y);
+                                        minDist = Math.min(minDist, dist);
+                                    }
+                                    
+                                    // Normalize distance (0 = boundary, 1 = far away)
+                                    this.distanceField[i] = Math.min(this.distanceField[i], 
+                                                                    minDist / distanceThreshold);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Inside barrier
+                    this.distanceField[i] = 0;
+                }
+            }
+        }
+    }
+    
+    // Helper function to calculate distance from point to line segment
+    _distanceToLineSegment(x, y, x1, y1, x2, y2) {
+        const A = x - x1;
+        const B = y - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+        
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        
+        if (lenSq !== 0) // To avoid division by zero
+            param = dot / lenSq;
+        
+        let xx, yy;
+        
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+        
+        const dx = x - xx;
+        const dy = y - yy;
+        
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
      // Zero out fluid in barrier cells
@@ -366,17 +524,33 @@ class FluidSimulation {
         }
     }
 
+    // Collide function
     collide() {
-        const omega = 1 / (3 * this.viscosity + 0.5);
+        // Compute adaptive relaxation parameter based on flow conditions
+        // Higher viscosity (more stable) for high-speed regions
+        const baseOmega = 1 / (3 * this.viscosity + 0.5);
+        
+        let maxSpeed = 0;
+        let minDensity = 1.0;
+        let stabilityCorrections = 0;
 
         for (let y = 1; y < this.ydim - 1; y++) {
             for (let x = 1; x < this.xdim - 1; x++) {
                 const i = x + y * this.xdim;
                 if (this.barriers[i]) continue;
 
+                // Compute macroscopic values (density and velocity)
                 const thisrho =
                     this.n0[i] + this.nN[i] + this.nS[i] + this.nE[i] + this.nW[i] +
                     this.nNW[i] + this.nNE[i] + this.nSW[i] + this.nSE[i];
+
+                // STABILITY CHECK 1: Detect abnormally low density
+                if (thisrho < this.minAllowedDensity || isNaN(thisrho)) {
+                    // Reset to equilibrium with reference values
+                    this.setEquilibrium(x, y, this.flowSpeed * 0.8, 0, 1.0);
+                    stabilityCorrections++;
+                    continue;
+                }
 
                 const thisux =
                     (this.nE[i] + this.nNE[i] + this.nSE[i]) -
@@ -386,12 +560,33 @@ class FluidSimulation {
                     (this.nN[i] + this.nNE[i] + this.nNW[i]) -
                     (this.nS[i] + this.nSE[i] + this.nSW[i]);
 
-                const ux = thisux / thisrho;
-                const uy = thisuy / thisrho;
+                let ux = thisux / thisrho;
+                let uy = thisuy / thisrho;
+                
+                // STABILITY CHECK 2: Limit velocity for stability
+                const speed = Math.sqrt(ux*ux + uy*uy);
+                if (speed > this.maxAllowedSpeed) {
+                    // Scale back velocity to maximum allowed
+                    const scale = this.maxAllowedSpeed / speed;
+                    ux *= scale;
+                    uy *= scale;
+                    stabilityCorrections++;
+                }
+                
+                // Update statistics
+                maxSpeed = Math.max(maxSpeed, speed);
+                minDensity = Math.min(minDensity, thisrho);
+
+                // Store macroscopic values
                 this.rho[i] = thisrho;
                 this.ux[i]  = ux;
                 this.uy[i]  = uy;
 
+                // Adaptive relaxation based on local flow conditions
+                // Use more stable relaxation in high-speed regions
+                const localOmega = baseOmega * (1.0 - 0.5 * speed / this.maxAllowedSpeed);
+
+                // Compute equilibrium values
                 const one9thrho  = this.one9th  * thisrho;
                 const one36thrho = this.one36th * thisrho;
                 const ux3 = 3 * ux;
@@ -402,19 +597,30 @@ class FluidSimulation {
                 const u2 = ux2 + uy2;
                 const u215 = 1.5 * u2;
 
-                this.n0[i]  += omega * (this.four9ths * thisrho * (1 - u215) - this.n0[i]);
-                this.nE[i]  += omega * (one9thrho * (1 + ux3 + 4.5*ux2 - u215) - this.nE[i]);
-                this.nW[i]  += omega * (one9thrho * (1 - ux3 + 4.5*ux2 - u215) - this.nW[i]);
-                this.nN[i]  += omega * (one9thrho * (1 + uy3 + 4.5*uy2 - u215) - this.nN[i]);
-                this.nS[i]  += omega * (one9thrho * (1 - uy3 + 4.5*uy2 - u215) - this.nS[i]);
-                this.nNE[i] += omega * (one36thrho * (1 + ux3 + uy3 + 4.5*(u2 + uxuy2) - u215) - this.nNE[i]);
-                this.nSE[i] += omega * (one36thrho * (1 + ux3 - uy3 + 4.5*(u2 - uxuy2) - u215) - this.nSE[i]);
-                this.nNW[i] += omega * (one36thrho * (1 - ux3 + uy3 + 4.5*(u2 - uxuy2) - u215) - this.nNW[i]);
-                this.nSW[i] += omega * (one36thrho * (1 - ux3 - uy3 + 4.5*(u2 + uxuy2) - u215) - this.nSW[i]);
+                this.n0[i]  += localOmega * (this.four9ths * thisrho * (1 - u215) - this.n0[i]);
+                this.nE[i]  += localOmega * (one9thrho * (1 + ux3 + 4.5*ux2 - u215) - this.nE[i]);
+                this.nW[i]  += localOmega * (one9thrho * (1 - ux3 + 4.5*ux2 - u215) - this.nW[i]);
+                this.nN[i]  += localOmega * (one9thrho * (1 + uy3 + 4.5*uy2 - u215) - this.nN[i]);
+                this.nS[i]  += localOmega * (one9thrho * (1 - uy3 + 4.5*uy2 - u215) - this.nS[i]);
+                this.nNE[i] += localOmega * (one36thrho * (1 + ux3 + uy3 + 4.5*(u2 + uxuy2) - u215) - this.nNE[i]);
+                this.nSE[i] += localOmega * (one36thrho * (1 + ux3 - uy3 + 4.5*(u2 - uxuy2) - u215) - this.nSE[i]);
+                this.nNW[i] += localOmega * (one36thrho * (1 - ux3 + uy3 + 4.5*(u2 - uxuy2) - u215) - this.nNW[i]);
+                this.nSW[i] += localOmega * (one36thrho * (1 - ux3 - uy3 + 4.5*(u2 + uxuy2) - u215) - this.nSW[i]);
             }
         }
+        
+        // Update diagnostic variables
+        this.maxSpeed = maxSpeed;
+        this.minDensity = minDensity;
+        this.stabilityCorrections += stabilityCorrections;
+        
+        // Calculate Reynolds number: Re = L * U / ν
+        // Using chord length as characteristic length
+        const characteristicLength = this.xdim / 6; // Based on chordFraction
+        this.reynoldsNumber = characteristicLength * this.maxSpeed / this.viscosity;
     }
 
+    // Stream function with interpolated bounce-back
     stream() {
         // Stream north-moving
         for (let y = this.ydim - 2; y > 0; y--) {
@@ -432,15 +638,84 @@ class FluidSimulation {
                 this.nSE[x + y*this.xdim] = this.nSE[x - 1 + (y+1)*this.xdim];
             }
         }
-        // Bounce-back from barriers
+        
+        // Interpolated bounce-back from barriers
         for (let y = 1; y < this.ydim - 1; y++) {
             for (let x = 1; x < this.xdim - 1; x++) {
-                if (this.barriers[x + y*this.xdim]) {
-                    const i = x + y*this.xdim;
+                const i = x + y*this.xdim;
+                
+                if (this.barriers[i]) {
+                    // Standard bounce-back for solid nodes
                     [this.nE[x+1 + y*this.xdim], this.nW[i]] = [this.nW[i], this.nE[i]];
                     [this.nN[x + (y+1)*this.xdim], this.nS[i]] = [this.nS[i], this.nN[i]];
                     [this.nNE[x+1 + (y+1)*this.xdim], this.nSW[i]] = [this.nSW[i], this.nNE[i]];
                     [this.nNW[x-1 + (y+1)*this.xdim], this.nSE[i]] = [this.nSE[i], this.nNW[i]];
+                } else {
+                    // For fluid cells near barriers, use interpolated bounce-back
+                    // This results in smoother boundaries and more accurate flow
+                    const d = this.distanceField[i];
+                    
+                    // Only apply to cells near boundaries
+                    if (d < 1.0) {
+                        // E neighbor check
+                        if (x < this.xdim - 1 && this.barriers[i + 1]) {
+                            // Interpolated bounce-back for better accuracy
+                            // This adjusts for the actual boundary position
+                            const q = 1.0 - d;  // Interpolation coefficient
+                            this.nW[i] = q * this.nE[i] + (1-q) * this.nW[i];
+                        }
+                        
+                        // W neighbor check
+                        if (x > 0 && this.barriers[i - 1]) {
+                            const q = 1.0 - d;
+                            this.nE[i] = q * this.nW[i] + (1-q) * this.nE[i];
+                        }
+                        
+                        // N neighbor check
+                        if (y < this.ydim - 1 && this.barriers[i + this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nS[i] = q * this.nN[i] + (1-q) * this.nS[i];
+                        }
+                        
+                        // S neighbor check
+                        if (y > 0 && this.barriers[i - this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nN[i] = q * this.nS[i] + (1-q) * this.nN[i];
+                        }
+                        
+                        // Diagonal directions - only apply if direct neighbors are fluid
+                        // NE neighbor
+                        if (x < this.xdim - 1 && y < this.ydim - 1 && 
+                            this.barriers[i + 1 + this.xdim] && 
+                            !this.barriers[i + 1] && !this.barriers[i + this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nSW[i] = q * this.nNE[i] + (1-q) * this.nSW[i];
+                        }
+                        
+                        // NW neighbor
+                        if (x > 0 && y < this.ydim - 1 && 
+                            this.barriers[i - 1 + this.xdim] && 
+                            !this.barriers[i - 1] && !this.barriers[i + this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nSE[i] = q * this.nNW[i] + (1-q) * this.nSE[i];
+                        }
+                        
+                        // SE neighbor
+                        if (x < this.xdim - 1 && y > 0 && 
+                            this.barriers[i + 1 - this.xdim] && 
+                            !this.barriers[i + 1] && !this.barriers[i - this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nNW[i] = q * this.nSE[i] + (1-q) * this.nNW[i];
+                        }
+                        
+                        // SW neighbor
+                        if (x > 0 && y > 0 && 
+                            this.barriers[i - 1 - this.xdim] && 
+                            !this.barriers[i - 1] && !this.barriers[i - this.xdim]) {
+                            const q = 1.0 - d;
+                            this.nNE[i] = q * this.nSW[i] + (1-q) * this.nNE[i];
+                        }
+                    }
                 }
             }
         }
@@ -474,38 +749,30 @@ class FluidSimulation {
         }
     }
 
-    // draw() {
-    //     // Compute curl before drawing
-    //     this.computeCurl();
-    
-    //     const scale = 100.0;  // Adjust this to change curl color sensitivity
-    //     for (let y = 0; y < this.ydim; y++) {
-    //         for (let x = 0; x < this.xdim; x++) {
-    //             const i = x + y * this.xdim;
-                
-    //             if (this.barriers[i]) {
-    //                 // barrier in white
-    //                 this.fillSquare(x, y, 255, 255, 255);
-    //                 continue;
-    //             }
-    
-    //             // Map curl to color index
-    //             let colorIndex = Math.floor((this.curl[i] * scale + 0.5) * this.nColors);
-    //             colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
-    
-    //             const c = this.colors[colorIndex];
-    //             this.fillSquare(x, y, c.r, c.g, c.b);
-    //         }
-    //     }
-    //     // Put the simulation pixels onto the canvas
-    //     this.ctx.putImageData(this.imageData, 0, 0);
-    // }
-
-
+    // Draw function
     draw() {
         this.computeSpeed();
     
-        const scale = 1200;  // same as your velocity->color indexing
+        // Calculate the dynamic range of the velocity field
+        let maxObservedSpeed = 0.001; // Avoid division by zero
+        let sumSpeed = 0;
+        let count = 0;
+        
+        for (let i = 0; i < this.speed.length; i++) {
+            if (!this.barriers[i]) {
+                maxObservedSpeed = Math.max(maxObservedSpeed, this.speed[i]);
+                sumSpeed += this.speed[i];
+                count++;
+            }
+        }
+        
+        // Calculate average speed
+        const avgSpeed = sumSpeed / Math.max(1, count);
+        
+        // Use a combination of maximum and average speed for better scaling        
+        const effectiveMaxSpeed = Math.max(this.flowSpeed * 1.3, maxObservedSpeed * 0.85);
+        const scale = this.nColors / effectiveMaxSpeed;
+        
         for (let y = 0; y < this.ydim; y++) {
             for (let x = 0; x < this.xdim; x++) {
                 const i = x + y * this.xdim;
@@ -517,22 +784,43 @@ class FluidSimulation {
                 }
     
                 const spd = this.speed[i];
-                let colorIndex = Math.floor(spd * scale);
+                
+                // Apply non-linear mapping to better distribute colors                
+                const normalizedSpeed = spd / effectiveMaxSpeed;
+                const enhancedSpeed = Math.pow(normalizedSpeed, 0.85);
+                
+                let colorIndex = Math.floor(enhancedSpeed * this.nColors);
                 colorIndex = Math.max(0, Math.min(this.nColors - 1, colorIndex));
     
                 const c = this.colors[colorIndex];
                 this.fillSquare(x, y, c.r, c.g, c.b);
             }
         }
+        
         // Put the simulation pixels onto the canvas
         this.ctx.putImageData(this.imageData, 0, 0);
+        
+        // Add diagnostic information to status message
+        this._updateDiagnostics();
+    }
     
-        // Add horizontal legend at the bottom left
-        // this.drawLegend(scale);
+    // Update diagnostic information
+    _updateDiagnostics() {
+        const statusMsg = document.getElementById('statusMessage');
+        if (statusMsg) {
+            if (this.running) {
+                statusMsg.innerHTML = `Status: Solving LBM<br>` +
+                                     `Max Speed: ${this.maxSpeed.toFixed(4)}<br>` +
+                                     `Re: ${Math.round(this.reynoldsNumber)}<br>` + 
+                                     `Corrections: ${this.stabilityCorrections}`;
+            } else {
+                statusMsg.innerHTML = `Status: Paused<br>` +
+                                     `Max Speed: ${this.maxSpeed.toFixed(4)}<br>` +
+                                     `Re: ${Math.round(this.reynoldsNumber)}`;
+            }
+        }
     }
         
-    
-    
     fillSquare(x, y, r, g, b) {
         const flippedY = this.ydim - y - 1;
         for (let py = flippedY * this.pxPerSquare; py < (flippedY + 1) * this.pxPerSquare; py++) {
@@ -546,11 +834,14 @@ class FluidSimulation {
         }
     }
 
+    // Update method with error handling and FPS limiting
     update() {
         if (!this.running) return;
     
         try {
-            const stepsPerFrame = 5;
+            // Limit steps per frame based on current stability
+            const stepsPerFrame = this.stabilityCorrections > 0 ? 1 : 5;
+            
             for (let step = 0; step < stepsPerFrame; step++) {
                 this.setBoundaryConditions();
                 this.collide();
@@ -558,7 +849,15 @@ class FluidSimulation {
             }
     
             this.draw();
-            requestAnimationFrame(() => this.update());
+            
+            // Use setTimeout instead of requestAnimationFrame for better stability
+            // when performance is an issue
+            if (this.stabilityCorrections > 50) {
+                // If we're having lots of stability issues, slow down simulation
+                setTimeout(() => this.update(), 50);
+            } else {
+                requestAnimationFrame(() => this.update());
+            }
         } catch (error) {
             this.running = false;
             const statusMsg = document.getElementById('statusMessage');
@@ -587,8 +886,10 @@ class FluidSimulation {
         this.initFluid();
         this.addNACABarrier({
             chordFraction: 1/6,
-            thickness: 0.12,
-            angle: 0
+            thickness: this.airfoilThickness,
+            angle: this.currentAngle,
+            camber: this.airfoilCamber,
+            camberPos: 0.4
         });
 
         this.draw();
@@ -643,12 +944,12 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.width = Math.max(Math.floor(rect.width), 600);
     canvas.height = Math.max(Math.floor(rect.height), 400);
 
-    // Create simulation
+    // Create simulation with higher flow speed
     const simulation = new FluidSimulation(canvas, {
         pxPerSquare: 2,
-        flowSpeed: 0.225,
+        flowSpeed: 0.35, // Increased from 0.225
         flowAngleDeg: 0,
-        viscosity: .3
+        viscosity: 0.25 // Slightly reduced from 0.3
     });
     
     canvas.classList.add('initialized');
@@ -666,7 +967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { threshold: 0.1 });
     
-    document.getElementById('statusMessage').textContent = 'Status: Domain Initalized';
+    document.getElementById('statusMessage').textContent = 'Status: Domain Initialized';
 
     observer.observe(canvas);
 
