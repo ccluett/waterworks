@@ -23,51 +23,150 @@ function getDayDate(dayIndex, seasonYear) {
 
 // Data Fetching
 async function fetchData() {
-    const url = new URL('https://www.ncei.noaa.gov/access/services/data/v1');
-    url.searchParams.set('dataset', 'daily-summaries');
-    url.searchParams.set('stations', config.station);
-    url.searchParams.set('dataTypes', config.dataTypes);
-    url.searchParams.set('startDate', config.startDate);
-    url.searchParams.set('endDate', config.endDate);
-    url.searchParams.set('format', 'csv');
-
+    const baseUrl = 'https://www.ncdc.noaa.gov/cdo-web/api/v2/data';
+    const token = 'nXmOKjrZlqFObwTYdKyPRurnbZhVvTZz';
+    
     // Create an abort controller for timeout
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    try {
-        const response = await fetch(url, {
-            signal: controller.signal,
-            cache: 'no-cache' // Ensure fresh data
-        });
+    async function fetchDataTypeByYear(dataType, startYear, endYear) {
+        console.log(`Fetching ${dataType} data for years ${startYear}-${endYear}`);
         
-        clearTimeout(timeout);
+        // Create date range for this batch
+        const startDate = startYear === parseInt(config.startDate.split('-')[0]) ? 
+            config.startDate : 
+            `${startYear}-01-01`;
+            
+        const endDate = endYear === parseInt(config.endDate.split('-')[0]) ?
+            config.endDate :
+            `${endYear}-12-31`;
+            
+        const params = new URLSearchParams();
+        params.set('datasetid', 'GHCND');
+        params.set('stationid', 'GHCND:' + config.station);
+        params.set('startdate', startDate);
+        params.set('enddate', endDate);
+        params.set('limit', '1000');
+        params.set('units', 'standard');
+        params.set('datatypeid', dataType);
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+        let typeData = [];
+        let offset = 0;
+        let moreData = true;
+        
+        while (moreData) {
+            const queryParams = new URLSearchParams(params);
+            queryParams.set('offset', offset.toString());
+            const url = `${baseUrl}?${queryParams.toString()}`;
+            
+            console.log(`Fetching ${dataType} from: ${url}`);
+            
+            const response = await fetch(url, {
+                signal: controller.signal,
+                cache: 'no-cache',
+                headers: {
+                    'token': token
+                }
+            });
+            
+            if (!response.ok) {
+                console.error(`Error fetching ${dataType} data for years ${startYear}-${endYear}: ${response.status}`);
+                return [];
+            }
+            
+            const data = await response.json();
+            
+            if (!data.results || data.results.length === 0) {
+                break;
+            }
+            
+            console.log(`Received ${data.results.length} ${dataType} records for ${startYear}-${endYear}`);
+            typeData = [...typeData, ...data.results];
+            offset += data.results.length;
+            
+            if (data.metadata && data.metadata.resultset) {
+                const { count, limit, offset: currentOffset } = data.metadata.resultset;
+                if (currentOffset + limit >= count) {
+                    moreData = false;
+                }
+            } else {
+                moreData = false;
+            }
         }
         
-        const text = await response.text();
+        return typeData;
+    }
+
+    try {
+        // Fetch each data type separately, similar to the MATLAB approach
+        let snowData = [];
+        let snowDepthData = [];
         
-        // Use Promise.race to handle parsing timeout
-        return await Promise.race([
-            new Promise((resolve) => {
-                Papa.parse(text, {
-                    header: true,
-                    dynamicTyping: true,
-                    complete: (results) => {
-                        resolve(results.data.filter(row => row.DATE));
-                    },
-                    error: (error) => {
-                        console.error('CSV parsing error:', error);
-                        resolve([]);
-                    }
-                });
-            }),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('CSV parsing timeout')), 10000)
-            )
-        ]);
+        // Get the start and end years from config
+        const startYear = parseInt(config.startDate.split('-')[0]);
+        const endYear = parseInt(config.endDate.split('-')[0]);
+        
+        // Fetch data in year batches
+        for (let year = startYear; year <= endYear; year++) {
+            // Fetch SNOW data for this year
+            const yearSnowData = await fetchDataTypeByYear('SNOW', year, year);
+            snowData = [...snowData, ...yearSnowData];
+            
+            // Fetch SNWD data for this year
+            const yearSnwdData = await fetchDataTypeByYear('SNWD', year, year);
+            snowDepthData = [...snowDepthData, ...yearSnwdData];
+        }
+        
+        // Check if we got any data
+        console.log(`Retrieved ${snowData.length} SNOW records and ${snowDepthData.length} SNWD records`);
+        
+        if (snowData.length === 0 && snowDepthData.length === 0) {
+            console.warn('No data returned from API');
+            throw new Error('No data returned from API');
+        }
+        
+        // Log sample data if available
+        if (snowData.length > 0) {
+            console.log('Sample SNOW data:', snowData[0]);
+        }
+        if (snowDepthData.length > 0) {
+            console.log('Sample SNWD data:', snowDepthData[0]);
+        }
+        
+        // Combine the data (similar to MATLAB's approach)
+        const dataByDate = {};
+        
+        // Process snow data
+        snowData.forEach(item => {
+            if (!item.date || !item.value) return;
+            
+            const date = item.date.split('T')[0]; // Extract date part
+            if (!dataByDate[date]) {
+                dataByDate[date] = { DATE: date, SNOW: -9999, SNWD: -9999 };
+            }
+            
+            dataByDate[date].SNOW = parseFloat(item.value);
+        });
+        
+        // Process snow depth data
+        snowDepthData.forEach(item => {
+            if (!item.date || !item.value) return;
+            
+            const date = item.date.split('T')[0]; // Extract date part
+            if (!dataByDate[date]) {
+                dataByDate[date] = { DATE: date, SNOW: -9999, SNWD: -9999 };
+            }
+            
+            dataByDate[date].SNWD = parseFloat(item.value);
+        });
+        
+        // Convert to array of objects for compatibility with the existing code
+        const formattedData = Object.values(dataByDate).filter(row => row.DATE);
+        
+        console.log(`Combined data into ${formattedData.length} daily records`);
+        
+        return formattedData;
     } catch (error) {
         console.error('Data fetch failed:', error);
         // Check if we have cached data
@@ -81,7 +180,6 @@ async function fetchData() {
         clearTimeout(timeout);
     }
 }
-
 // Interpolate snow depth values
 function interpolateSnowDepth(depths) {
     // Create a copy of the input array
