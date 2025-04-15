@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NOAA Worker Test</title>
+</head>
+<body>
+    <h1>Testing Snowfall Worker</h1>
+    <div id="status">Connecting to worker...</div>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('status').textContent = 'Fetching data from worker...';
+        
+        fetch('http://localhost:8787')
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('status').textContent = 
+                    `Success! Received ${data.length} records.`;
+                
+                const latestDate = data[data.length-1].DATE;
+                const sample = data.slice(data.length-5);
+                
+                document.getElementById('result').innerHTML = `
+                    <p>Latest date: ${latestDate}</p>
+                    <p>Sample of last 5 records:</p>
+                    <pre>${JSON.stringify(sample, null, 2)}</pre>
+                `;
+            })
+            .catch(error => {
+                document.getElementById('status').textContent = 
+                    `Error: ${error.message}`;
+                console.error('Error:', error);
+            });
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Local development environment variables
+.dev.vars
+
+# Node modules
+node_modules/
+
+# Build files
+.wrangler/
+dist/
+
+# Local environment files
+.env
+.env.local

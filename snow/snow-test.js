@@ -1,14 +1,7 @@
 // Configuration and State
 const config = {
-    token: 'nXmOKjrZlqFObwTYdKyPRurnbZhVvTZz', // V2 API token
-    station: 'GHCND:USW00014755',              // V2 API station format
-    startDate: '1948-08-01',
-    endDate: new Date().toISOString().split('T')[0],
-    dataTypes: ['SNOW', 'SNWD'],               // Array format for separate API calls
-    baseURL: 'https://www.ncdc.noaa.gov/cdo-web/api/v2/data', // V2 API endpoint
-    retryCount: 3,                             // Max retry attempts per chunk
-    chunkSize: 90,                             // Days per chunk (smaller chunks)
-    requestTimeout: 60000                      // Timeout for individual requests (60 seconds)
+    workerURL: 'https://snowfall-proxy.yourusername.workers.dev',
+    startDate: '1948-08-01'
 };
 
 let seasonsData = [];
@@ -26,107 +19,7 @@ function getDayDate(dayIndex, seasonYear) {
     });
 }
 
-// Helper function to create date chunks
-function createDateChunks(startDate, endDate, chunkSizeDays) {
-    const chunks = [];
-    const startDateObj = new Date(startDate);
-    const endDateObj = new Date(endDate);
-    
-    let chunkStartDate = new Date(startDateObj);
-    
-    while (chunkStartDate < endDateObj) {
-        let chunkEndDate = new Date(chunkStartDate);
-        chunkEndDate.setDate(chunkEndDate.getDate() + chunkSizeDays - 1); // Inclusive end date
-        
-        // Ensure the chunk doesn't exceed the end date
-        if (chunkEndDate > endDateObj) {
-            chunkEndDate = new Date(endDateObj);
-        }
-        
-        chunks.push({
-            start: chunkStartDate.toISOString().split('T')[0],
-            end: chunkEndDate.toISOString().split('T')[0]
-        });
-        
-        // Move to the next chunk
-        chunkStartDate = new Date(chunkEndDate);
-        chunkStartDate.setDate(chunkStartDate.getDate() + 1);
-    }
-    
-    return chunks;
-}
-
-// Fetch data for a specific data type and date range
-async function fetchDataChunk(dataType, startDate, endDate, controller, retryCount = 0) {
-    // If we've exceeded retry count, return empty results to avoid infinite loops
-    if (retryCount >= config.retryCount) {
-        console.warn(`Maximum retry count (${config.retryCount}) exceeded for ${dataType} from ${startDate} to ${endDate}. Giving up.`);
-        return [];
-    }
-
-    const url = new URL(config.baseURL);
-    url.searchParams.set('datasetid', 'GHCND');
-    url.searchParams.set('stationid', config.station);
-    url.searchParams.set('datatypeid', dataType);
-    url.searchParams.set('startdate', startDate);
-    url.searchParams.set('enddate', endDate);
-    url.searchParams.set('limit', 1000);
-    url.searchParams.set('units', 'metric'); // Use metric for mm (to match original V1 API data units)
-    
-    console.log(`Fetching ${dataType} data from ${startDate} to ${endDate}...${retryCount > 0 ? ` (Retry ${retryCount})` : ''}`);
-    
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'token': config.token
-            },
-            signal: controller.signal,
-            cache: 'no-cache'
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`API Error Response: ${errorText}`);
-            
-            // If the controller is already aborted, just propagate the abort
-            if (controller.signal.aborted) {
-                throw new DOMException('The operation was aborted.', 'AbortError');
-            }
-            
-            // Calculate backoff time based on retry count (exponential backoff)
-            const backoffTime = Math.min(15000, 2000 * Math.pow(1.5, retryCount));
-            
-            if (response.status === 429 || response.status === 503 || response.status === 403) {
-                console.log(`Rate limited or service unavailable. Waiting ${backoffTime/1000} seconds before retry...`);
-                await new Promise(resolve => setTimeout(resolve, backoffTime));
-                return fetchDataChunk(dataType, startDate, endDate, controller, retryCount + 1);
-            }
-            
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        return data && data.results ? data.results : [];
-    } catch (error) {
-        console.error(`Error fetching ${dataType} from ${startDate} to ${endDate}:`, error);
-        
-        // Propagate AbortError to be handled by the caller
-        if (error.name === 'AbortError') {
-            throw error;
-        }
-        
-        // Calculate backoff time based on retry count (exponential backoff)
-        const backoffTime = Math.min(15000, 2000 * Math.pow(1.5, retryCount));
-        
-        // Retry most errors (not needed to check for AbortError since we already did above)
-        console.log(`Network error. Waiting ${backoffTime/1000} seconds before retry...`);
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
-        return fetchDataChunk(dataType, startDate, endDate, controller, retryCount + 1);
-    }
-}
-
-// Data Fetching
+// Data Fetching - Simplified to use Worker
 async function fetchData() {
     try {
         // Check for cached data first
@@ -135,150 +28,37 @@ async function fetchData() {
         
         if (cachedData && cacheTimestamp) {
             const cacheAge = Date.now() - parseInt(cacheTimestamp);
-            if (cacheAge < 24 * 60 * 60 * 1000) { // 24 hour cache
+            if (cacheAge < 12 * 60 * 60 * 1000) { // 12 hour cache (shorter than worker's 24h)
                 console.log('Using cached data');
                 return JSON.parse(cachedData);
             }
         }
         
-        // Create date chunks to handle the large date range
-        const chunks = createDateChunks(config.startDate, config.endDate, config.chunkSize);
-        const allResults = new Map();
+        // Fetch from our Worker
+        console.log('Fetching data from worker...');
+        document.getElementById('lastDataDate').textContent = 'Loading data from server...';
         
-        // Process data with adaptive delay and individual request timeouts
-        let completedChunks = 0;
-        let failedChunks = 0;
-        const totalChunks = config.dataTypes.length * chunks.length;
-        let lastProgressUpdate = 0;
+        const response = await fetch(config.workerURL);
         
-        // Create a function to process a single dataType and chunk
-        async function processChunk(dataType, chunk, retryCount = 0) {
-            // If we've exceeded retry count, give up on this chunk
-            if (retryCount >= config.retryCount) {
-                console.warn(`Maximum retry count (${config.retryCount}) exceeded for ${dataType} from ${chunk.start} to ${chunk.end}. Giving up.`);
-                completedChunks++;
-                failedChunks++;
-                // Update progress display
-                const percent = Math.round((completedChunks / totalChunks) * 100);
-                document.getElementById('lastDataDate').textContent = 
-                    `Loading data... ${percent}% complete (${failedChunks} errors)`;
-                return;
-            }
-            
-            try {
-                // Create per-request abort controller with timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => {
-                    controller.abort('timeout'); // Mark this abort as a timeout
-                    console.warn(`Request timeout for ${dataType} from ${chunk.start} to ${chunk.end} - will retry`);
-                }, config.requestTimeout); // Use configurable timeout
-                
-                try {
-                    const results = await fetchDataChunk(dataType, chunk.start, chunk.end, controller);
-                    clearTimeout(timeoutId); // Clear timeout if request completes
-                    
-                    if (results.length > 0) {
-                        // Process results for this data type
-                        for (const item of results) {
-                            const date = item.date.split('T')[0]; // Extract date part
-                            
-                            if (!allResults.has(date)) {
-                                allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
-                            }
-                            
-                            const entry = allResults.get(date);
-                            if (dataType === 'SNOW') {
-                                entry.SNOW = item.value;
-                            } else if (dataType === 'SNWD') {
-                                entry.SNWD = item.value;
-                            }
-                        }
-                        
-                        // Success - increment completed and update progress
-                        completedChunks++;
-                        const now = Date.now();
-                        if (now - lastProgressUpdate > 1000) {
-                            const percent = Math.round((completedChunks / totalChunks) * 100);
-                            const failureRate = failedChunks > 0 ? Math.round((failedChunks / completedChunks) * 100) : 0;
-                            document.getElementById('lastDataDate').textContent = 
-                                `Loading data... ${percent}% complete (${failedChunks} errors)`;
-                            lastProgressUpdate = now;
-                            
-                            // Adaptive delay based on failure rate
-                            if (failureRate > 20) {
-                                await new Promise(resolve => setTimeout(resolve, 3000)); // Longer delay if high failure rate
-                            } else {
-                                await new Promise(resolve => setTimeout(resolve, 1000)); // Normal delay
-                            }
-                        } else {
-                            // Regular delay between requests
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                    } else {
-                        console.warn(`No data returned for ${dataType} from ${chunk.start} to ${chunk.end}, retrying...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Brief delay before retry
-                        return processChunk(dataType, chunk, retryCount + 1); // Retry on empty results
-                    }
-                } catch (error) {
-                    clearTimeout(timeoutId); // Make sure to clear timeout on error
-                    
-                    // Check if this was a timeout abort
-                    if (error.name === 'AbortError') {
-                        console.log(`Request for ${dataType} from ${chunk.start} to ${chunk.end} aborted, retrying...`);
-                        // Retry on timeout
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Brief delay before retry
-                        return processChunk(dataType, chunk, retryCount + 1);
-                    } else {
-                        console.error(`Error processing ${dataType} from ${chunk.start} to ${chunk.end}:`, error);
-                        // Retry on other errors
-                        await new Promise(resolve => setTimeout(resolve, 2000)); // Brief delay before retry
-                        return processChunk(dataType, chunk, retryCount + 1);
-                    }
-                }
-                
-            } catch (error) {
-                console.error(`Critical error processing chunk for ${dataType}:`, error);
-                completedChunks++; // Still count as completed to avoid hanging
-                failedChunks++;
-                
-                // Update progress display
-                const percent = Math.round((completedChunks / totalChunks) * 100);
-                document.getElementById('lastDataDate').textContent = 
-                    `Loading data... ${percent}% complete (${failedChunks} errors)`;
-            }
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
         
-        // Process chunks sequentially to avoid overwhelming the API
-        for (const dataType of config.dataTypes) {
-            for (const chunk of chunks) {
-                await processChunk(dataType, chunk);
-            }
-        }
-        
-        // Convert map to array and sort by date
-        const combinedResults = Array.from(allResults.values());
-        combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
-        
-        // Show summary after data fetching completes
-        if (totalChunks > 0) {
-            const successRate = Math.round(((totalChunks - failedChunks) / totalChunks) * 100);
-            console.log(`Data fetching complete. Success rate: ${successRate}% (${totalChunks - failedChunks}/${totalChunks} chunks)`);
-        }
+        const data = await response.json();
         
         // Save to cache if we have meaningful results
-        if (combinedResults.length > 0) {
+        if (data && data.length > 0) {
             try {
-                localStorage.setItem('snowData', JSON.stringify(combinedResults));
+                localStorage.setItem('snowData', JSON.stringify(data));
                 localStorage.setItem('snowDataTimestamp', Date.now().toString());
-                console.log(`Cached ${combinedResults.length} days of data`);
+                console.log(`Cached ${data.length} days of data`);
             } catch (e) {
                 console.warn('Error caching data:', e);
             }
-        } else {
-            console.warn('No data collected to cache');
         }
         
-        return combinedResults;
+        return data;
     } catch (error) {
         console.error('Data fetch failed:', error);
         // Fallback to cached data if available
@@ -287,8 +67,6 @@ async function fetchData() {
             console.log('Using cached data due to error');
             return JSON.parse(cachedData);
         }
-        // If we have no cached data, return an empty array rather than null
-        // This will prevent errors downstream and show "no data available" message
         return [];
     }
 }
@@ -701,7 +479,7 @@ function calculateStatistics(rawData) {
     // Calculate season totals, ranks, and max depths
     const seasonTotals = {};
     const seasonMaxDepths = {};
-    const startYear = parseInt(config.startDate.split('-')[0]); // Get year from startDate
+    const startYear = 1948; // Hardcoded start year instead of parsing from config.startDate
 
     seasonsData.forEach(season => {
         // Skip seasons before our startDate year
