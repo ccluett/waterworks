@@ -42,7 +42,7 @@
                     Period of Record: 1948-present<br>
                 </p>
             </div>
-
+            <button id="clearCacheBtn">Clear Cache & Reload</button>
             <div class="statistics">            
 
                 <div class="snowiest-seasons">
@@ -74,12 +74,12 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="snow.js"></script>
+    <script src="snow-test.js"></script>
     <script>
-        // Mobile menu toggle
-        document.querySelector('.menu-toggle').addEventListener('click', function() {
-            document.querySelector('.nav-links').classList.toggle('show');
-        });
+        // // Mobile menu toggle
+        // document.querySelector('.menu-toggle').addEventListener('click', function() {
+        //     document.querySelector('.nav-links').classList.toggle('show');
+        // });
 
         // Close mobile menu when clicking a link
         document.querySelectorAll('.nav-links a').forEach(link => {
@@ -87,6 +87,15 @@
                 document.querySelector('.nav-links').classList.remove('show');
             });
         });
+        
+        document.getElementById('clearCacheBtn').addEventListener('click', function() {
+        localStorage.removeItem('snowData');
+        localStorage.removeItem('snowDataTimestamp');
+        console.log('Cache cleared!');
+        location.reload(); // Refresh the page
+    });
     </script>
+     
+
 </body>
 </html>
