@@ -1,6 +1,6 @@
 // Configuration and State
 const config = {
-    workerURL: 'https://snowfall-proxy.yourusername.workers.dev',
+    workerURL: 'https://snowfall-proxy.cluett26.workers.dev',
     startDate: '1948-08-01'
 };
 
