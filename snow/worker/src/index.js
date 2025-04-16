@@ -8,18 +8,22 @@ export default {
 		'Access-Control-Max-Age': '86400',
 	  };
   
-	  // Handle OPTIONS requests for CORS preflight
+	  // Handle OPTIONS request for CORS preflight
 	  if (request.method === 'OPTIONS') {
-		return new Response(null, { headers: corsHeaders, status: 204 });
+		return new Response(null, {
+		  headers: corsHeaders,
+		  status: 204,
+		});
 	  }
   
 	  console.log(`Received ${request.method} request to ${request.url}`);
   
 	  try {
-		// Try to get cached data from KV
+		// Check if we have cached data
 		const cachedData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' });
 		const cacheTimestamp = await env.SNOWFALL_CACHE.get('timestamp');
   
+		// Use cache if it's less than 24 hours old
 		if (cachedData && cacheTimestamp) {
 		  const cacheAge = Date.now() - parseInt(cacheTimestamp);
 		  if (cacheAge < config.cacheTime * 1000) {
@@ -38,20 +42,22 @@ export default {
 		  console.log('No cache found, fetching data from NOAA');
 		}
   
-		// Calculate the current date as endDate
+		// Calculate endDate as current date
 		const endDate = new Date().toISOString().split('T')[0];
   
-		// Retrieve your NOAA token from the environment
+		// Retrieve NOAA token from environment
 		const token = env.NOAA_API_TOKEN;
 		if (!token) throw new Error('NOAA_API_TOKEN is not defined in the environment');
   
 		console.log(`Fetching data from ${config.startDate} to ${endDate}`);
 		const data = await fetchAllData(config.startDate, endDate, token);
   
+		// Cache the data
 		console.log(`Caching ${data.length} records`);
 		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime });
 		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime });
   
+		// Return the response
 		return new Response(JSON.stringify(data), {
 		  headers: {
 			'Content-Type': 'application/json',
@@ -62,10 +68,16 @@ export default {
 	  } catch (error) {
 		console.error(`Error processing request: ${error.message}`);
 		console.error(error.stack);
-		return new Response(
-		  JSON.stringify({ error: error.message, timestamp: new Date().toISOString() }),
-		  { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-		);
+		return new Response(JSON.stringify({ 
+		  error: error.message,
+		  timestamp: new Date().toISOString()
+		}), {
+		  status: 500,
+		  headers: {
+			'Content-Type': 'application/json',
+			...corsHeaders,
+		  },
+		});
 	  }
 	}
   };
@@ -88,18 +100,22 @@ export default {
    * @param {string} token - NOAA API token
    */
   async function fetchAllData(startDate, endDate, token) {
+	// Create date chunks
 	const chunks = createDateChunks(startDate, endDate, config.chunkSize);
 	const allResults = new Map();
   
 	console.log(`Processing ${chunks.length} chunks for ${config.dataTypes.length} data types`);
   
+	// Process each data type
 	for (const dataType of config.dataTypes) {
+	  // Process each chunk
 	  for (const chunk of chunks) {
 		console.log(`Fetching ${dataType} from ${chunk.start} to ${chunk.end}`);
 		const results = await fetchDataChunk(dataType, chunk.start, chunk.end, token);
   
+		// Process results for this data type
 		for (const item of results) {
-		  const date = item.date.split('T')[0];
+		  const date = item.date.split('T')[0]; // Extract date part
 		  if (!allResults.has(date)) {
 			allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
 		  }
@@ -110,12 +126,12 @@ export default {
 			entry.SNWD = item.value;
 		  }
 		}
-		// Delay between chunks to reduce load and avoid rate-limiting
-		await new Promise((resolve) => setTimeout(resolve, 500));
+		// Add a small delay between chunks to avoid rate limiting
+		await new Promise(resolve => setTimeout(resolve, 500));
 	  }
 	}
-  
-	// Convert map to sorted array by date
+	
+	// Convert map to array and sort by date
 	const combinedResults = Array.from(allResults.values());
 	combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
   
@@ -129,14 +145,15 @@ export default {
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
    * @param {string} token - NOAA API token from env
-   * @param {number} retryCount - Current retry count (optional)
+   * @param {number} retryCount - Current retry attempt (optional)
    */
   async function fetchDataChunk(dataType, startDate, endDate, token, retryCount = 0) {
+	// If we've exceeded retry count, return empty results
 	if (retryCount >= config.retryCount) {
 	  console.error(`Maximum retry count (${config.retryCount}) exceeded for ${dataType} from ${startDate} to ${endDate}.`);
 	  return [];
 	}
-  
+	
 	const url = new URL(config.baseURL);
 	url.searchParams.set('datasetid', 'GHCND');
 	url.searchParams.set('stationid', config.station);
@@ -144,30 +161,33 @@ export default {
 	url.searchParams.set('startdate', startDate);
 	url.searchParams.set('enddate', endDate);
 	url.searchParams.set('limit', 1000);
-	url.searchParams.set('units', 'metric');
+	url.searchParams.set('units', 'metric'); // Use metric for mm (to match original API)
   
 	try {
 	  console.log(`Making request to ${url.toString()}`);
+	  
 	  const response = await fetch(url, {
 		method: 'GET',
 		headers: {
 		  'token': token,
 		},
 	  });
-  
+	  
 	  if (!response.ok) {
 		const responseText = await response.text();
 		console.error(`Error response ${response.status}: ${responseText}`);
-  
+		
+		// Handle rate limiting
 		if ([429, 503, 403].includes(response.status)) {
 		  const backoffTime = Math.min(15000, 2000 * Math.pow(1.5, retryCount));
 		  console.log(`Rate limited (${response.status}). Waiting ${backoffTime}ms before retry ${retryCount + 1}...`);
-		  await new Promise((resolve) => setTimeout(resolve, backoffTime));
+		  await new Promise(resolve => setTimeout(resolve, backoffTime));
 		  return fetchDataChunk(dataType, startDate, endDate, token, retryCount + 1);
 		}
+		
 		throw new Error(`HTTP error! status: ${response.status}`);
 	  }
-  
+	  
 	  const data = await response.json();
 	  console.log(`Received ${data?.results?.length || 0} ${dataType} records`);
 	  return data && data.results ? data.results : [];
@@ -175,7 +195,7 @@ export default {
 	  console.error(`Error fetching ${dataType} from ${startDate} to ${endDate}:`, error);
 	  const backoffTime = Math.min(15000, 2000 * Math.pow(1.5, retryCount));
 	  console.log(`Network error. Waiting ${backoffTime}ms before retry ${retryCount + 1}...`);
-	  await new Promise((resolve) => setTimeout(resolve, backoffTime));
+	  await new Promise(resolve => setTimeout(resolve, backoffTime));
 	  return fetchDataChunk(dataType, startDate, endDate, token, retryCount + 1);
 	}
   }
@@ -184,26 +204,34 @@ export default {
    * Create date chunks for processing.
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
-   * @param {number} chunkSizeDays - Number of days per chunk
+   * @param {number} chunkSizeDays - Size of each chunk in days
    */
   function createDateChunks(startDate, endDate, chunkSizeDays) {
 	const chunks = [];
 	const startDateObj = new Date(startDate);
 	const endDateObj = new Date(endDate);
+	
 	let chunkStartDate = new Date(startDateObj);
-  
+	
 	while (chunkStartDate < endDateObj) {
 	  let chunkEndDate = new Date(chunkStartDate);
-	  chunkEndDate.setDate(chunkEndDate.getDate() + chunkSizeDays - 1);
+	  chunkEndDate.setDate(chunkEndDate.getDate() + chunkSizeDays - 1); // Inclusive end date
+	  
+	  // Ensure the chunk doesn't exceed the end date
 	  if (chunkEndDate > endDateObj) {
 		chunkEndDate = new Date(endDateObj);
 	  }
+	  
 	  chunks.push({
 		start: chunkStartDate.toISOString().split('T')[0],
 		end: chunkEndDate.toISOString().split('T')[0],
 	  });
+	  
+	  // Move to the next chunk
 	  chunkStartDate = new Date(chunkEndDate);
 	  chunkStartDate.setDate(chunkStartDate.getDate() + 1);
 	}
+	
 	return chunks;
-  }  
+  }
+  
