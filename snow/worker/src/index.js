@@ -1,4 +1,6 @@
+// Main Worker code (index.js)
 export default {
+	// Handle HTTP requests - this just returns the cached data
 	async fetch(request, env, ctx) {
 	  // Define CORS headers
 	  const corsHeaders = {
@@ -18,68 +20,100 @@ export default {
   
 	  console.log(`Received ${request.method} request to ${request.url}`);
 	  
-	  // Parse URL to check for cache bypass parameter
+	  // Parse URL to check for parameters
 	  const url = new URL(request.url);
 	  const bypassCache = url.searchParams.has('bypass_cache');
+	  const adminAction = url.searchParams.get('admin');
 	  
-	  if (bypassCache) {
-		console.log('Bypass cache parameter detected - forcing fresh data fetch');
+	  // Admin actions for manual control (use with ?admin=action)
+	  if (adminAction) {
+		// Check for a simple admin token/password to prevent unauthorized access
+		const adminToken = url.searchParams.get('token');
+		if (adminToken !== env.ADMIN_TOKEN) {
+		  return new Response(JSON.stringify({ error: "Unauthorized" }), {
+			status: 401,
+			headers: {
+			  'Content-Type': 'application/json',
+			  ...corsHeaders,
+			}
+		  });
+		}
+  
+		if (adminAction === 'clear_cache') {
+		  // Clear the cache completely
+		  await env.SNOWFALL_CACHE.delete('snowData');
+		  await env.SNOWFALL_CACHE.delete('timestamp');
+		  await env.SNOWFALL_CACHE.delete('progress');
+		  return new Response(JSON.stringify({ success: true, message: "Cache cleared" }), {
+			headers: {
+			  'Content-Type': 'application/json',
+			  ...corsHeaders,
+			}
+		  });
+		}
+		else if (adminAction === 'start_fetch') {
+		  // Manually trigger a fetch cycle - schedule it to run immediately
+		  await queueFetchCycle(env);
+		  return new Response(JSON.stringify({ success: true, message: "Fetch cycle queued" }), {
+			headers: {
+			  'Content-Type': 'application/json',
+			  ...corsHeaders,
+			}
+		  });
+		}
+		else if (adminAction === 'status') {
+		  // Return status information
+		  const progress = await env.SNOWFALL_CACHE.get('progress', { type: 'json' }) || {};
+		  const timestamp = await env.SNOWFALL_CACHE.get('timestamp');
+		  const dataLength = await getDataLength(env);
+		  return new Response(JSON.stringify({ 
+			progress, 
+			lastUpdate: timestamp ? new Date(parseInt(timestamp)).toISOString() : null,
+			dataLength
+		  }), {
+			headers: {
+			  'Content-Type': 'application/json',
+			  ...corsHeaders,
+			}
+		  });
+		}
 	  }
   
 	  try {
-		// Check if we have cached data and aren't bypassing cache
-		const cachedData = !bypassCache ? await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) : null;
-		const cacheTimestamp = !bypassCache ? await env.SNOWFALL_CACHE.get('timestamp') : null;
-  
-		// Use cache if it's less than 24 hours old and we're not bypassing
-		if (!bypassCache && cachedData && cacheTimestamp) {
-		  const cacheAge = Date.now() - parseInt(cacheTimestamp);
-		  if (cacheAge < config.cacheTime * 1000) {
-			console.log(`Using cached data from ${new Date(parseInt(cacheTimestamp)).toISOString()}`);
-			console.log(`Cached data length: ${Array.isArray(cachedData) ? cachedData.length : 'not an array'}`);
-			return new Response(JSON.stringify(cachedData), {
-			  headers: {
-				'Content-Type': 'application/json',
-				'Cache-Control': `max-age=${config.cacheTime}`,
-				...corsHeaders,
-			  },
-			});
-		  } else {
-			console.log('Cache expired, fetching fresh data');
-		  }
+		// Get cached data
+		const cachedData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' });
+		const cacheTimestamp = await env.SNOWFALL_CACHE.get('timestamp');
+		
+		// If we have data, return it
+		if (cachedData && cachedData.length > 0) {
+		  console.log(`Returning cached data from ${new Date(parseInt(cacheTimestamp)).toISOString()}`);
+		  console.log(`Cached data length: ${cachedData.length} records`);
+		  
+		  // Return data
+		  return new Response(JSON.stringify(cachedData), {
+			headers: {
+			  'Content-Type': 'application/json',
+			  'Cache-Control': `max-age=${config.cacheTime}`,
+			  ...corsHeaders,
+			},
+		  });
 		} else {
-		  console.log('No cache found or bypassing cache, fetching data from NOAA');
+		  // If no cached data exists yet, trigger an initial fetch
+		  ctx.waitUntil(queueFetchCycle(env));
+		  
+		  // Return an appropriate message
+		  return new Response(JSON.stringify({ 
+			message: "No data available yet. Initial data fetch has been triggered. Please try again in a few minutes.",
+			timestamp: new Date().toISOString()
+		  }), {
+			status: 503, // Service Unavailable
+			headers: {
+			  'Content-Type': 'application/json',
+			  ...corsHeaders,
+			  'Retry-After': '300' // Suggest client retry in 5 minutes
+			},
+		  });
 		}
-  
-		// Calculate endDate as current date
-		const endDate = new Date().toISOString().split('T')[0];
-  
-		// Retrieve NOAA token from environment
-		const token = env.NOAA_API_TOKEN;
-		if (!token) throw new Error('NOAA_API_TOKEN is not defined in the environment');
-		console.log(`NOAA API token exists: ${token ? 'Yes' : 'No'}`);
-  
-		console.log(`Fetching data from ${config.startDate} to ${endDate}`);
-		const data = await fetchAllData(config.startDate, endDate, token);
-		console.log(`Fetched ${data.length} records from NOAA`);
-  
-		// Only cache the data if we actually got something
-		if (data.length > 0) {
-		  console.log(`Caching ${data.length} records`);
-		  await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime });
-		  await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime });
-		} else {
-		  console.warn('No data returned from NOAA API, not updating cache');
-		}
-  
-		// Return the response
-		return new Response(JSON.stringify(data), {
-		  headers: {
-			'Content-Type': 'application/json',
-			'Cache-Control': `max-age=${config.cacheTime}`,
-			...corsHeaders,
-		  },
-		});
 	  } catch (error) {
 		console.error(`Error processing request: ${error.message}`);
 		console.error(error.stack);
@@ -94,8 +128,146 @@ export default {
 		  },
 		});
 	  }
+	},
+  
+	// Handle scheduled events - this is where data fetching happens
+	async scheduled(event, env, ctx) {
+	  console.log(`Running scheduled task: ${event.cron}`);
+	  
+	  // Queue the fetch cycle
+	  ctx.waitUntil(queueFetchCycle(env));
 	}
   };
+  
+  // Helper function to get data length
+  async function getDataLength(env) {
+	try {
+	  const data = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' });
+	  return data ? data.length : 0;
+	} catch (e) {
+	  console.error('Error getting data length:', e);
+	  return 0;
+	}
+  }
+  
+  // Queue a fetch cycle
+  async function queueFetchCycle(env) {
+	try {
+	  // Get progress state
+	  let progress = await env.SNOWFALL_CACHE.get('progress', { type: 'json' }) || {
+		currentYear: parseInt(config.startDate.split('-')[0]),
+		complete: false,
+		lastUpdated: null
+	  };
+  
+	  // If the cycle is complete, check if we need to start a new one
+	  const currentYear = new Date().getFullYear();
+	  
+	  if (progress.complete) {
+		// If we completed last year, reset to fetch just the current year's data
+		progress = {
+		  currentYear: currentYear - 1, // Start from last year to ensure we have all recent data
+		  complete: false,
+		  lastUpdated: new Date().toISOString()
+		};
+	  }
+  
+	  console.log(`Starting fetch cycle from year ${progress.currentYear}`);
+	  
+	  // Run the fetch cycle
+	  await runFetchCycle(env, progress);
+	} catch (error) {
+	  console.error('Error queuing fetch cycle:', error);
+	}
+  }
+  
+  // Run a fetch cycle - processes a chunk of years
+  async function runFetchCycle(env, progress) {
+	try {
+	  // Get token
+	  const token = env.NOAA_API_TOKEN;
+	  if (!token) {
+		console.error('NOAA_API_TOKEN is not defined in the environment');
+		return;
+	  }
+  
+	  // Determine date range for this cycle
+	  const startYear = progress.currentYear;
+	  let endYear = startYear + 5; // Process 5 years at a time
+	  
+	  const currentYear = new Date().getFullYear();
+	  if (endYear > currentYear) {
+		endYear = currentYear;
+		progress.complete = true;
+	  }
+  
+	  const startDate = `${startYear}-01-01`;
+	  const endDate = `${endYear}-12-31`;
+	  
+	  console.log(`Fetching data from ${startDate} to ${endDate}`);
+	  
+	  // Fetch the data for this range
+	  const data = await fetchAllData(startDate, endDate, token);
+	  console.log(`Fetched ${data.length} records from NOAA for years ${startYear}-${endYear}`);
+  
+	  // If we got data, merge it with existing data
+	  if (data.length > 0) {
+		// Get existing data
+		let existingData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) || [];
+		
+		// Merge datasets
+		const combinedData = mergeDataSets(existingData, data);
+		console.log(`Combined data now has ${combinedData.length} records`);
+		
+		// Update cache
+		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(combinedData), { expirationTtl: config.cacheTime * 7 }); // Keep for a week
+		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime * 7 });
+	  }
+  
+	  // Update progress
+	  progress.currentYear = endYear + 1;
+	  progress.lastUpdated = new Date().toISOString();
+	  await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
+	  
+	  console.log(`Fetch cycle completed. Progress: ${JSON.stringify(progress)}`);
+	} catch (error) {
+	  console.error('Error in fetch cycle:', error);
+	}
+  }
+  
+  // Helper function to merge datasets
+  function mergeDataSets(existingData, newData) {
+	// Create a map of existing data by DATE
+	const dataMap = new Map();
+	
+	// Add existing data to map
+	for (const record of existingData) {
+	  dataMap.set(record.DATE, record);
+	}
+	
+	// Merge or add new data
+	for (const record of newData) {
+	  if (dataMap.has(record.DATE)) {
+		// Update existing record if new data is better
+		const existing = dataMap.get(record.DATE);
+		if (record.SNOW !== -9999 && existing.SNOW === -9999) {
+		  existing.SNOW = record.SNOW;
+		}
+		if (record.SNWD !== -9999 && existing.SNWD === -9999) {
+		  existing.SNWD = record.SNWD;
+		}
+	  } else {
+		// Add new record
+		dataMap.set(record.DATE, record);
+	  }
+	}
+	
+	// Convert map back to array and sort by date
+	const combinedResults = Array.from(dataMap.values());
+	combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
+	
+	return combinedResults;
+  }
   
   // Configuration and state settings
   const config = {

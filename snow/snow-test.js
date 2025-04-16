@@ -19,40 +19,137 @@ function getDayDate(dayIndex, seasonYear) {
     });
 }
 
-// Data Fetching - Simplified to use Worker
+// Enhanced client-side implementation for server-side loading
 async function fetchData() {
     try {
         // Check for cached data first
         const cachedData = localStorage.getItem('snowData');
         const cacheTimestamp = localStorage.getItem('snowDataTimestamp');
         
+        // Update UI to show loading state
+        const lastDataElement = document.getElementById('lastDataDate');
+        lastDataElement.textContent = 'Loading data from server...';
+        
+        // Add a loading class to the element for styling
+        if (lastDataElement.classList) {
+            lastDataElement.classList.add('loading');
+        }
+        
+        // Use cached data if it's less than 12 hours old
         if (cachedData && cacheTimestamp) {
             const cacheAge = Date.now() - parseInt(cacheTimestamp);
-            if (cacheAge < 12 * 60 * 60 * 1000) { // 12 hour cache (shorter than worker's 24h)
-                console.log('Using cached data');
+            if (cacheAge < 12 * 60 * 60 * 1000) { // 12 hour cache
+                console.log('Using cached data from localStorage');
+                
+                // Still fetch in the background to check for updates
+                setTimeout(() => {
+                    fetch(config.workerURL)
+                        .then(response => response.ok ? response.json() : null)
+                        .then(data => {
+                            if (data && data.length > 0) {
+                                // Only update if we got valid data and it's different than what we have
+                                const currentData = JSON.parse(localStorage.getItem('snowData') || '[]');
+                                if (data.length !== currentData.length) {
+                                    console.log(`Updating local cache with new server data (${data.length} records)`);
+                                    localStorage.setItem('snowData', JSON.stringify(data));
+                                    localStorage.setItem('snowDataTimestamp', Date.now().toString());
+                                    
+                                    // Notify user that new data is available
+                                    const notification = document.createElement('div');
+                                    notification.className = 'update-notification';
+                                    notification.innerHTML = `
+                                        <div style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); 
+                                                    color: white; padding: 10px; border-radius: 5px; z-index: 1000;">
+                                            New data available! <button id="reload-btn">Reload</button>
+                                        </div>
+                                    `;
+                                    document.body.appendChild(notification);
+                                    
+                                    document.getElementById('reload-btn').addEventListener('click', () => {
+                                        location.reload();
+                                    });
+                                }
+                            }
+                        })
+                        .catch(err => console.warn('Background data check failed:', err));
+                }, 2000);
+                
                 return JSON.parse(cachedData);
             }
         }
         
         // Fetch from our Worker
         console.log('Fetching data from worker...');
-        document.getElementById('lastDataDate').textContent = 'Loading data from server...';
         
         const response = await fetch(config.workerURL);
         
+        // Handle different response scenarios
+        if (response.status === 503) {
+            // Server is still building data
+            const responseData = await response.json();
+            console.log('Server is still building data:', responseData.message);
+            
+            // Show a friendly message to the user
+            lastDataElement.textContent = 'Server is currently building the dataset. Initial data will be available soon.';
+            
+            // Update UI to show a progress indicator
+            const progressIndicator = document.createElement('div');
+            progressIndicator.id = 'build-progress';
+            progressIndicator.innerHTML = `
+                <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.7); border-radius: 4px;">
+                    <div>Dataset is being prepared...</div>
+                    <div style="width: 100%; height: 4px; background: #333; margin-top: 5px;">
+                        <div style="height: 100%; width: 20%; background: #3177f7; animation: pulse 2s infinite;"></div>
+                    </div>
+                    <style>
+                        @keyframes pulse {
+                            0% { opacity: 0.6; }
+                            50% { opacity: 1; }
+                            100% { opacity: 0.6; }
+                        }
+                    </style>
+                </div>
+            `;
+            lastDataElement.parentNode.appendChild(progressIndicator);
+            
+            // Check if we have cached data to use while waiting
+            if (cachedData) {
+                console.log('Using cached data while server builds dataset');
+                return JSON.parse(cachedData);
+            }
+            
+            // Return an empty array which will show no data visualization
+            return [];
+        }
+        
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log(`Received ${data.length} records from server`);
+        
+        // Remove loading state
+        if (lastDataElement.classList) {
+            lastDataElement.classList.remove('loading');
+        }
+        
+        // Update the last data date display
+        const currentDate = new Date();
+        lastDataElement.textContent = `Data updated: ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}`;
+        
+        // Clean up any progress indicators
+        const progressElem = document.getElementById('build-progress');
+        if (progressElem) {
+            progressElem.remove();
+        }
         
         // Save to cache if we have meaningful results
         if (data && data.length > 0) {
             try {
                 localStorage.setItem('snowData', JSON.stringify(data));
                 localStorage.setItem('snowDataTimestamp', Date.now().toString());
-                console.log(`Cached ${data.length} days of data`);
+                console.log(`Cached ${data.length} days of data locally`);
             } catch (e) {
                 console.warn('Error caching data:', e);
             }
@@ -61,6 +158,17 @@ async function fetchData() {
         return data;
     } catch (error) {
         console.error('Data fetch failed:', error);
+        
+        // Update UI to show error
+        const lastDataElement = document.getElementById('lastDataDate');
+        lastDataElement.textContent = `Error: ${error.message}`;
+        lastDataElement.style.color = '#ff6b6b';
+        
+        // Remove loading state
+        if (lastDataElement.classList) {
+            lastDataElement.classList.remove('loading');
+        }
+        
         // Fallback to cached data if available
         const cachedData = localStorage.getItem('snowData');
         if (cachedData) {
@@ -70,37 +178,6 @@ async function fetchData() {
         return [];
     }
 }
-
-// Interpolate snow depth values
-function interpolateSnowDepth(depths) {
-    // Create a copy of the input array
-    depths = [...depths];
-    
-    // Find gaps in the data (equivalent to isnan in MATLAB)
-    const gaps = depths.map(d => d === null || isNaN(d) || d === -9999);
-    
-    // If no gaps, return original array
-    if (!gaps.some(g => g)) {
-        return depths;
-    }
-    
-    // Find valid values at start and end (equivalent to find(~gaps, 1, 'first/last'))
-    const first_valid = gaps.findIndex(g => !g);
-    const last_valid = gaps.length - 1 - [...gaps].reverse().findIndex(g => !g);
-    
-    if (first_valid === -1 || last_valid === -1) {
-        return depths;
-    }
-    
-    // Get indices of valid measurements
-    const valid_indices = [];
-    const valid_values = [];
-    for (let i = 0; i < depths.length; i++) {
-        if (!gaps[i]) {
-            valid_indices.push(i);
-            valid_values.push(depths[i]);
-        }
-    }
     
     // Create interpolation for gaps between valid measurements
     const gap_indices = [];
