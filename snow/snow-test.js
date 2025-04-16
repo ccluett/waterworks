@@ -179,6 +179,37 @@ async function fetchData() {
     }
 }
     
+// Interpolate snow depth values
+function interpolateSnowDepth(depths) {
+    // Create a copy of the input array
+    depths = [...depths];
+    
+    // Find gaps in the data (equivalent to isnan in MATLAB)
+    const gaps = depths.map(d => d === null || isNaN(d) || d === -9999);
+    
+    // If no gaps, return original array
+    if (!gaps.some(g => g)) {
+        return depths;
+    }
+    
+    // Find valid values at start and end (equivalent to find(~gaps, 1, 'first/last'))
+    const first_valid = gaps.findIndex(g => !g);
+    const last_valid = gaps.length - 1 - [...gaps].reverse().findIndex(g => !g);
+    
+    if (first_valid === -1 || last_valid === -1) {
+        return depths;
+    }
+    
+    // Get indices of valid measurements
+    const valid_indices = [];
+    const valid_values = [];
+    for (let i = 0; i < depths.length; i++) {
+        if (!gaps[i]) {
+            valid_indices.push(i);
+            valid_values.push(depths[i]);
+        }
+    }
+    
     // Create interpolation for gaps between valid measurements
     const gap_indices = [];
     for (let i = 0; i < gaps.length; i++) {
