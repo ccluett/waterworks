@@ -1,0 +1,18 @@
+{
+	"name": "snowfall-proxy",
+	"main": "src/index.js",
+	"compatibility_date": "2023-05-18",
+	
+	// When you create your KV namespace, you'll need to replace these placeholder IDs
+	"kv_namespaces": [
+	  {
+		"binding": "SNOWFALL_CACHE",
+		"id": "14c8e0da9ac84626b166c5c163c73367"
+	  }
+	],
+	
+	// For local development with a customized port
+	"dev": {
+	  "port": 8787
+	}
+  }
