@@ -53,7 +53,7 @@ export default {
 		}
 		else if (adminAction === 'start_fetch') {
 		  // Manually trigger a fetch cycle - schedule it to run immediately
-		  await queueFetchCycle(env);
+		  ctx.waitUntil(queueFetchCycle(env));
 		  return new Response(JSON.stringify({ success: true, message: "Fetch cycle queued" }), {
 			headers: {
 			  'Content-Type': 'application/json',
@@ -150,39 +150,8 @@ export default {
 	}
   }
   
-  // Queue a fetch cycle
+  // Queue a fetch cycle - optimized for one-time fetch
   async function queueFetchCycle(env) {
-	try {
-	  // Get progress state
-	  let progress = await env.SNOWFALL_CACHE.get('progress', { type: 'json' }) || {
-		currentYear: parseInt(config.startDate.split('-')[0]),
-		complete: false,
-		lastUpdated: null
-	  };
-  
-	  // If the cycle is complete, check if we need to start a new one
-	  const currentYear = new Date().getFullYear();
-	  
-	  if (progress.complete) {
-		// If we completed last year, reset to fetch just the current year's data
-		progress = {
-		  currentYear: currentYear - 1, // Start from last year to ensure we have all recent data
-		  complete: false,
-		  lastUpdated: new Date().toISOString()
-		};
-	  }
-  
-	  console.log(`Starting fetch cycle from year ${progress.currentYear}`);
-	  
-	  // Run the fetch cycle
-	  await runFetchCycle(env, progress);
-	} catch (error) {
-	  console.error('Error queuing fetch cycle:', error);
-	}
-  }
-  
-  // Run a fetch cycle - processes a chunk of years
-  async function runFetchCycle(env, progress) {
 	try {
 	  // Get token
 	  const token = env.NOAA_API_TOKEN;
@@ -190,83 +159,37 @@ export default {
 		console.error('NOAA_API_TOKEN is not defined in the environment');
 		return;
 	  }
-  
-	  // Determine date range for this cycle
-	  const startYear = progress.currentYear;
-	  let endYear = startYear + 5; // Process 5 years at a time
 	  
-	  const currentYear = new Date().getFullYear();
-	  if (endYear > currentYear) {
-		endYear = currentYear;
-		progress.complete = true;
-	  }
-  
-	  const startDate = `${startYear}-01-01`;
-	  const endDate = `${endYear}-12-31`;
+	  // Get current date
+	  const currentDate = new Date();
+	  const endDate = currentDate.toISOString().split('T')[0];
 	  
-	  console.log(`Fetching data from ${startDate} to ${endDate}`);
+	  console.log(`Starting complete data fetch from ${config.startDate} to ${endDate}`);
 	  
-	  // Fetch the data for this range
-	  const data = await fetchAllData(startDate, endDate, token);
-	  console.log(`Fetched ${data.length} records from NOAA for years ${startYear}-${endYear}`);
+	  // Fetch all data in one go
+	  const data = await fetchAllData(config.startDate, endDate, token);
+	  console.log(`Fetched ${data.length} total records from NOAA`);
   
-	  // If we got data, merge it with existing data
+	  // If we got data, store it
 	  if (data.length > 0) {
-		// Get existing data
-		let existingData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) || [];
-		
-		// Merge datasets
-		const combinedData = mergeDataSets(existingData, data);
-		console.log(`Combined data now has ${combinedData.length} records`);
-		
-		// Update cache
-		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(combinedData), { expirationTtl: config.cacheTime * 7 }); // Keep for a week
+		console.log(`Caching ${data.length} records`);
+		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime * 7 }); // Keep for a week
 		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime * 7 });
+		
+		// Update progress to mark as complete
+		const progress = {
+		  currentYear: currentDate.getFullYear(),
+		  complete: true,
+		  lastUpdated: new Date().toISOString(),
+		  totalRecords: data.length
+		};
+		await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
 	  }
-  
-	  // Update progress
-	  progress.currentYear = endYear + 1;
-	  progress.lastUpdated = new Date().toISOString();
-	  await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
 	  
-	  console.log(`Fetch cycle completed. Progress: ${JSON.stringify(progress)}`);
+	  console.log(`Complete fetch cycle completed with ${data.length} records`);
 	} catch (error) {
 	  console.error('Error in fetch cycle:', error);
 	}
-  }
-  
-  // Helper function to merge datasets
-  function mergeDataSets(existingData, newData) {
-	// Create a map of existing data by DATE
-	const dataMap = new Map();
-	
-	// Add existing data to map
-	for (const record of existingData) {
-	  dataMap.set(record.DATE, record);
-	}
-	
-	// Merge or add new data
-	for (const record of newData) {
-	  if (dataMap.has(record.DATE)) {
-		// Update existing record if new data is better
-		const existing = dataMap.get(record.DATE);
-		if (record.SNOW !== -9999 && existing.SNOW === -9999) {
-		  existing.SNOW = record.SNOW;
-		}
-		if (record.SNWD !== -9999 && existing.SNWD === -9999) {
-		  existing.SNWD = record.SNWD;
-		}
-	  } else {
-		// Add new record
-		dataMap.set(record.DATE, record);
-	  }
-	}
-	
-	// Convert map back to array and sort by date
-	const combinedResults = Array.from(dataMap.values());
-	combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
-	
-	return combinedResults;
   }
   
   // Configuration and state settings
@@ -275,9 +198,9 @@ export default {
 	dataTypes: ['SNOW', 'SNWD'],   // Data types to retrieve
 	startDate: '1948-08-01',       // Historical start date
 	baseURL: 'https://www.ncdc.noaa.gov/cdo-web/api/v2/data', // NOAA API endpoint
-	chunkSize: 365,              // Days per chunk (using a larger chunk size on the server)
-	retryCount: 3,               // Maximum retry attempts per chunk
-	cacheTime: 86400,            // Cache lifetime in seconds (24 hours)
+	chunkSize: 365,                // Days per chunk (using a larger chunk size on the server)
+	retryCount: 3,                 // Maximum retry attempts per chunk
+	cacheTime: 86400,              // Cache lifetime in seconds (24 hours)
   };
   
   /**
@@ -325,7 +248,7 @@ export default {
 		  }
 		  
 		  // Add a small delay between chunks to avoid rate limiting
-		  await new Promise(resolve => setTimeout(resolve, 500));
+		  await new Promise(resolve => setTimeout(resolve, 1000)); // Increased to 1 second for safer rate limiting
 		}
 	  }
 	  
