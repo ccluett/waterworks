@@ -17,17 +17,26 @@ export default {
 	  }
   
 	  console.log(`Received ${request.method} request to ${request.url}`);
+	  
+	  // Parse URL to check for cache bypass parameter
+	  const url = new URL(request.url);
+	  const bypassCache = url.searchParams.has('bypass_cache');
+	  
+	  if (bypassCache) {
+		console.log('Bypass cache parameter detected - forcing fresh data fetch');
+	  }
   
 	  try {
-		// Check if we have cached data
-		const cachedData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' });
-		const cacheTimestamp = await env.SNOWFALL_CACHE.get('timestamp');
+		// Check if we have cached data and aren't bypassing cache
+		const cachedData = !bypassCache ? await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) : null;
+		const cacheTimestamp = !bypassCache ? await env.SNOWFALL_CACHE.get('timestamp') : null;
   
-		// Use cache if it's less than 24 hours old
-		if (cachedData && cacheTimestamp) {
+		// Use cache if it's less than 24 hours old and we're not bypassing
+		if (!bypassCache && cachedData && cacheTimestamp) {
 		  const cacheAge = Date.now() - parseInt(cacheTimestamp);
 		  if (cacheAge < config.cacheTime * 1000) {
 			console.log(`Using cached data from ${new Date(parseInt(cacheTimestamp)).toISOString()}`);
+			console.log(`Cached data length: ${Array.isArray(cachedData) ? cachedData.length : 'not an array'}`);
 			return new Response(JSON.stringify(cachedData), {
 			  headers: {
 				'Content-Type': 'application/json',
@@ -39,7 +48,7 @@ export default {
 			console.log('Cache expired, fetching fresh data');
 		  }
 		} else {
-		  console.log('No cache found, fetching data from NOAA');
+		  console.log('No cache found or bypassing cache, fetching data from NOAA');
 		}
   
 		// Calculate endDate as current date
@@ -48,14 +57,20 @@ export default {
 		// Retrieve NOAA token from environment
 		const token = env.NOAA_API_TOKEN;
 		if (!token) throw new Error('NOAA_API_TOKEN is not defined in the environment');
+		console.log(`NOAA API token exists: ${token ? 'Yes' : 'No'}`);
   
 		console.log(`Fetching data from ${config.startDate} to ${endDate}`);
 		const data = await fetchAllData(config.startDate, endDate, token);
+		console.log(`Fetched ${data.length} records from NOAA`);
   
-		// Cache the data
-		console.log(`Caching ${data.length} records`);
-		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime });
-		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime });
+		// Only cache the data if we actually got something
+		if (data.length > 0) {
+		  console.log(`Caching ${data.length} records`);
+		  await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime });
+		  await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime });
+		} else {
+		  console.warn('No data returned from NOAA API, not updating cache');
+		}
   
 		// Return the response
 		return new Response(JSON.stringify(data), {
@@ -100,43 +115,66 @@ export default {
    * @param {string} token - NOAA API token
    */
   async function fetchAllData(startDate, endDate, token) {
-	// Create date chunks
-	const chunks = createDateChunks(startDate, endDate, config.chunkSize);
-	const allResults = new Map();
+	try {
+	  // Create date chunks
+	  const chunks = createDateChunks(startDate, endDate, config.chunkSize);
+	  const allResults = new Map();
+	  
+	  console.log(`Processing ${chunks.length} chunks for ${config.dataTypes.length} data types`);
+	  console.log(`First chunk: ${chunks[0].start} to ${chunks[0].end}`);
+	  console.log(`Last chunk: ${chunks[chunks.length-1].start} to ${chunks[chunks.length-1].end}`);
   
-	console.log(`Processing ${chunks.length} chunks for ${config.dataTypes.length} data types`);
+	  // Process each data type
+	  for (const dataType of config.dataTypes) {
+		// Process each chunk
+		for (const chunk of chunks) {
+		  console.log(`Fetching ${dataType} from ${chunk.start} to ${chunk.end}`);
+		  
+		  try {
+			const results = await fetchDataChunk(dataType, chunk.start, chunk.end, token);
+			console.log(`Fetched ${results.length} ${dataType} records for this chunk`);
   
-	// Process each data type
-	for (const dataType of config.dataTypes) {
-	  // Process each chunk
-	  for (const chunk of chunks) {
-		console.log(`Fetching ${dataType} from ${chunk.start} to ${chunk.end}`);
-		const results = await fetchDataChunk(dataType, chunk.start, chunk.end, token);
-  
-		// Process results for this data type
-		for (const item of results) {
-		  const date = item.date.split('T')[0]; // Extract date part
-		  if (!allResults.has(date)) {
-			allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
+			// Process results for this data type
+			for (const item of results) {
+			  const date = item.date.split('T')[0]; // Extract date part
+			  if (!allResults.has(date)) {
+				allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
+			  }
+			  const entry = allResults.get(date);
+			  if (dataType === 'SNOW') {
+				entry.SNOW = item.value;
+			  } else if (dataType === 'SNWD') {
+				entry.SNWD = item.value;
+			  }
+			}
+		  } catch (chunkError) {
+			console.error(`Error processing chunk ${chunk.start} to ${chunk.end}: ${chunkError.message}`);
+			// Continue to next chunk instead of failing the entire operation
 		  }
-		  const entry = allResults.get(date);
-		  if (dataType === 'SNOW') {
-			entry.SNOW = item.value;
-		  } else if (dataType === 'SNWD') {
-			entry.SNWD = item.value;
-		  }
+		  
+		  // Add a small delay between chunks to avoid rate limiting
+		  await new Promise(resolve => setTimeout(resolve, 500));
 		}
-		// Add a small delay between chunks to avoid rate limiting
-		await new Promise(resolve => setTimeout(resolve, 500));
 	  }
+	  
+	  // Convert map to array and sort by date
+	  const combinedResults = Array.from(allResults.values());
+	  combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
+	  
+	  console.log(`Processed ${combinedResults.length} total records`);
+	  if (combinedResults.length > 0) {
+		console.log(`Sample data - first record: ${JSON.stringify(combinedResults[0])}`);
+		console.log(`Sample data - last record: ${JSON.stringify(combinedResults[combinedResults.length-1])}`);
+	  } else {
+		console.error(`No records found - empty result set`);
+	  }
+	  
+	  return combinedResults;
+	} catch (error) {
+	  console.error(`Error in fetchAllData: ${error.message}`);
+	  console.error(error.stack);
+	  return []; // Return empty array so we don't break the application
 	}
-	
-	// Convert map to array and sort by date
-	const combinedResults = Array.from(allResults.values());
-	combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
-  
-	console.log(`Processed ${combinedResults.length} total records`);
-	return combinedResults;
   }
   
   /**
@@ -177,6 +215,17 @@ export default {
 		const responseText = await response.text();
 		console.error(`Error response ${response.status}: ${responseText}`);
 		
+		// Provide specific error messages for common NOAA API errors
+		if (response.status === 400) {
+		  console.error('Bad request: Check that station ID and data types are valid');
+		} else if (response.status === 401 || response.status === 403) {
+		  console.error('Authentication error: NOAA API token may be invalid or expired');
+		} else if (response.status === 429) {
+		  console.error('Rate limited: Too many requests to the NOAA API');
+		} else if (response.status === 503) {
+		  console.error('NOAA API service unavailable, may be down for maintenance');
+		}
+		
 		// Handle rate limiting
 		if ([429, 503, 403].includes(response.status)) {
 		  const backoffTime = Math.min(15000, 2000 * Math.pow(1.5, retryCount));
@@ -185,11 +234,16 @@ export default {
 		  return fetchDataChunk(dataType, startDate, endDate, token, retryCount + 1);
 		}
 		
-		throw new Error(`HTTP error! status: ${response.status}`);
+		throw new Error(`HTTP error! status: ${response.status}, response: ${responseText}`);
 	  }
 	  
 	  const data = await response.json();
 	  console.log(`Received ${data?.results?.length || 0} ${dataType} records`);
+	  
+	  if (data?.results?.length === 0) {
+		console.warn(`No ${dataType} data available for period ${startDate} to ${endDate}`);
+	  }
+	  
 	  return data && data.results ? data.results : [];
 	} catch (error) {
 	  console.error(`Error fetching ${dataType} from ${startDate} to ${endDate}:`, error);
@@ -234,4 +288,3 @@ export default {
 	
 	return chunks;
   }
-  
