@@ -150,7 +150,7 @@ export default {
 	}
   }
   
-  // Queue a fetch cycle - optimized for one-time fetch
+  // Queue a fetch cycle with checkpoint system
   async function queueFetchCycle(env) {
 	try {
 	  // Get token
@@ -160,33 +160,85 @@ export default {
 		return;
 	  }
 	  
-	  // Get current date
+	  // Get the checkpoint (last year processed)
+	  let progress = await env.SNOWFALL_CACHE.get('progress', { type: 'json' }) || {
+		lastYearProcessed: parseInt(config.startDate.split('-')[0]) - 1,
+		complete: false,
+		lastUpdated: null
+	  };
+	  
+	  // Get current date for the end date
 	  const currentDate = new Date();
-	  const endDate = currentDate.toISOString().split('T')[0];
+	  const currentYear = currentDate.getFullYear();
 	  
-	  console.log(`Starting complete data fetch from ${config.startDate} to ${endDate}`);
-	  
-	  // Fetch all data in one go
-	  const data = await fetchAllData(config.startDate, endDate, token);
-	  console.log(`Fetched ${data.length} total records from NOAA`);
-  
-	  // If we got data, store it
-	  if (data.length > 0) {
-		console.log(`Caching ${data.length} records`);
-		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(data), { expirationTtl: config.cacheTime * 7 }); // Keep for a week
-		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime * 7 });
+	  // If we've already completed all years, just fetch the current year to check for updates
+	  if (progress.complete) {
+		console.log(`Data is already complete. Checking for updates for current year only.`);
+		const startDate = `${currentYear-1}-01-01`; // Start from last year
+		const endDate = currentDate.toISOString().split('T')[0];
 		
-		// Update progress to mark as complete
-		const progress = {
-		  currentYear: currentDate.getFullYear(),
-		  complete: true,
-		  lastUpdated: new Date().toISOString(),
-		  totalRecords: data.length
-		};
-		await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
+		console.log(`Fetching updates from ${startDate} to ${endDate}`);
+		const data = await fetchAllData(startDate, endDate, token);
+		
+		if (data.length > 0) {
+		  // Merge with existing data
+		  const existingData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) || [];
+		  const combinedData = mergeDataSets(existingData, data);
+		  
+		  // Store updated data
+		  await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(combinedData), { expirationTtl: config.cacheTime * 7 });
+		  await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime * 7 });
+		  
+		  // Update progress
+		  progress.lastUpdated = new Date().toISOString();
+		  await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
+		  
+		  console.log(`Updated with ${data.length} new records. Total: ${combinedData.length}`);
+		}
+		return;
 	  }
 	  
-	  console.log(`Complete fetch cycle completed with ${data.length} records`);
+	  // Calculate number of years to process in this run (e.g., 10 years at a time)
+	  const maxYearsPerRun = 10;
+	  const startYear = progress.lastYearProcessed + 1;
+	  const endYear = Math.min(startYear + maxYearsPerRun - 1, currentYear);
+	  
+	  // Create date range for this batch
+	  const startDate = `${startYear}-01-01`;
+	  const batchEndDate = `${endYear}-12-31`;
+	  
+	  console.log(`Processing years ${startYear} to ${endYear}`);
+	  
+	  // Fetch this batch of data
+	  const data = await fetchAllData(startDate, batchEndDate, token);
+	  console.log(`Fetched ${data.length} records for years ${startYear}-${endYear}`);
+	  
+	  if (data.length > 0) {
+		// Merge with existing data
+		const existingData = await env.SNOWFALL_CACHE.get('snowData', { type: 'json' }) || [];
+		const combinedData = mergeDataSets(existingData, data);
+		
+		// Store updated data
+		await env.SNOWFALL_CACHE.put('snowData', JSON.stringify(combinedData), { expirationTtl: config.cacheTime * 7 });
+		await env.SNOWFALL_CACHE.put('timestamp', Date.now().toString(), { expirationTtl: config.cacheTime * 7 });
+		
+		// Update checkpoint
+		progress.lastYearProcessed = endYear;
+		progress.complete = (endYear >= currentYear);
+		progress.lastUpdated = new Date().toISOString();
+		await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
+		
+		console.log(`Progress updated: Years ${startYear}-${endYear} completed. Total records: ${combinedData.length}`);
+		console.log(`Status: ${progress.complete ? 'All data fetched!' : 'More years pending.'}`);
+	  } else {
+		console.error(`No data returned for years ${startYear}-${endYear}. Skipping to next batch.`);
+		
+		// Update checkpoint to skip to next batch even if this one failed
+		progress.lastYearProcessed = endYear;
+		progress.complete = (endYear >= currentYear);
+		progress.lastUpdated = new Date().toISOString();
+		await env.SNOWFALL_CACHE.put('progress', JSON.stringify(progress), { expirationTtl: config.cacheTime * 7 });
+	  }
 	} catch (error) {
 	  console.error('Error in fetch cycle:', error);
 	}
@@ -204,7 +256,7 @@ export default {
   };
   
   /**
-   * Fetch data for all data types from NOAA API.
+   * Fetch data for all data types from NOAA API with improved error handling.
    * @param {string} startDate - Start date (YYYY-MM-DD)
    * @param {string} endDate - End date (YYYY-MM-DD)
    * @param {string} token - NOAA API token
@@ -219,36 +271,54 @@ export default {
 	  console.log(`First chunk: ${chunks[0].start} to ${chunks[0].end}`);
 	  console.log(`Last chunk: ${chunks[chunks.length-1].start} to ${chunks[chunks.length-1].end}`);
   
-	  // Process each data type
+	  // Process each data type with error handling
 	  for (const dataType of config.dataTypes) {
-		// Process each chunk
-		for (const chunk of chunks) {
-		  console.log(`Fetching ${dataType} from ${chunk.start} to ${chunk.end}`);
-		  
-		  try {
-			const results = await fetchDataChunk(dataType, chunk.start, chunk.end, token);
-			console.log(`Fetched ${results.length} ${dataType} records for this chunk`);
-  
-			// Process results for this data type
-			for (const item of results) {
-			  const date = item.date.split('T')[0]; // Extract date part
-			  if (!allResults.has(date)) {
-				allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
+		try {
+		  // Process each chunk with error handling
+		  for (const chunk of chunks) {
+			try {
+			  console.log(`Fetching ${dataType} from ${chunk.start} to ${chunk.end}`);
+			  
+			  try {
+				const results = await fetchDataChunk(dataType, chunk.start, chunk.end, token);
+				console.log(`Fetched ${results.length} ${dataType} records for this chunk`);
+	  
+				// Process results for this data type
+				for (const item of results) {
+				  try {
+					const date = item.date.split('T')[0]; // Extract date part
+					if (!allResults.has(date)) {
+					  allResults.set(date, { DATE: date, SNOW: -9999, SNWD: -9999 });
+					}
+					const entry = allResults.get(date);
+					if (dataType === 'SNOW') {
+					  entry.SNOW = item.value;
+					} else if (dataType === 'SNWD') {
+					  entry.SNWD = item.value;
+					}
+				  } catch (itemError) {
+					console.error(`Error processing item in ${dataType} for ${chunk.start}: ${itemError.message}`);
+					// Continue with next item
+				  }
+				}
+			  } catch (chunkError) {
+				console.error(`Error processing chunk ${chunk.start} to ${chunk.end}: ${chunkError.message}`);
+				console.error(chunkError.stack);
+				// Continue to next chunk instead of failing the entire operation
 			  }
-			  const entry = allResults.get(date);
-			  if (dataType === 'SNOW') {
-				entry.SNOW = item.value;
-			  } else if (dataType === 'SNWD') {
-				entry.SNWD = item.value;
-			  }
+			  
+			  // Add a small delay between chunks to avoid rate limiting
+			  await new Promise(resolve => setTimeout(resolve, 1000));
+			} catch (chunkLoopError) {
+			  console.error(`Error in chunk loop for ${dataType}: ${chunkLoopError.message}`);
+			  console.error(chunkLoopError.stack);
+			  // Continue with next chunk
 			}
-		  } catch (chunkError) {
-			console.error(`Error processing chunk ${chunk.start} to ${chunk.end}: ${chunkError.message}`);
-			// Continue to next chunk instead of failing the entire operation
 		  }
-		  
-		  // Add a small delay between chunks to avoid rate limiting
-		  await new Promise(resolve => setTimeout(resolve, 1000)); // Increased to 1 second for safer rate limiting
+		} catch (dataTypeError) {
+		  console.error(`Error processing data type ${dataType}: ${dataTypeError.message}`);
+		  console.error(dataTypeError.stack);
+		  // Continue with next data type
 		}
 	  }
 	  
@@ -382,4 +452,43 @@ export default {
 	}
 	
 	return chunks;
+  }
+  
+  /**
+   * Helper function to merge datasets
+   * @param {Array} existingData - Existing dataset
+   * @param {Array} newData - New dataset to merge
+   * @returns {Array} - Combined dataset
+   */
+  function mergeDataSets(existingData, newData) {
+	// Create a map of existing data by DATE
+	const dataMap = new Map();
+	
+	// Add existing data to map
+	for (const record of existingData) {
+	  dataMap.set(record.DATE, record);
+	}
+	
+	// Merge or add new data
+	for (const record of newData) {
+	  if (dataMap.has(record.DATE)) {
+		// Update existing record if new data is better
+		const existing = dataMap.get(record.DATE);
+		if (record.SNOW !== -9999 && existing.SNOW === -9999) {
+		  existing.SNOW = record.SNOW;
+		}
+		if (record.SNWD !== -9999 && existing.SNWD === -9999) {
+		  existing.SNWD = record.SNWD;
+		}
+	  } else {
+		// Add new record
+		dataMap.set(record.DATE, record);
+	  }
+	}
+	
+	// Convert map back to array and sort by date
+	const combinedResults = Array.from(dataMap.values());
+	combinedResults.sort((a, b) => a.DATE.localeCompare(b.DATE));
+	
+	return combinedResults;
   }
