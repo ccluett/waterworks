@@ -16,5 +16,11 @@
   // Cron Triggers for scheduled updates
   "triggers": {
     "crons": ["30 2 * * *"]
+  },
+  // Log configuration
+  "observability": {
+    "logs": {
+      "enabled": true
+    }
   }
 }
